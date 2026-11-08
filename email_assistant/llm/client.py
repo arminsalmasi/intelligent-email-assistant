@@ -8,6 +8,7 @@ fallback - an LLM outage degrades quality, it never breaks the pipeline.
 
 from __future__ import annotations
 
+import copy
 import json
 import random
 import threading
@@ -227,7 +228,9 @@ class LLMClient:
         if self.model is None:
             self._miss(purpose)
             return None
-        bound = self.model.bind_tools(tool_specs)
+        # deepcopy: provider integrations normalise (mutate) tool specs in place, which
+        # would change the cache key of later loop steps between live and replay.
+        bound = self.model.bind_tools(copy.deepcopy(tool_specs))
         result = self._call_with_retries(lambda: bound.invoke(messages), purpose)
         if result is None:
             self.telemetry.record("llm_fallback", purpose, reason="llm_error")

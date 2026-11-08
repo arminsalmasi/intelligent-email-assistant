@@ -87,4 +87,59 @@ Rollout: add an OTLP exporter (collector sidecar or the OTel SDK) pointing at Co
 
 ## Sample output
 
-<!-- SAMPLE_LOGS -->
+## Sample output
+
+Structured logs (replay-mode API run; one JSON object per line):
+
+```json
+{"ts": "2026-11-08T16:13:26.713+00:00", "level": "INFO", "logger": "email_assistant", "msg": "guard.quarantined", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "event": "guard.quarantined", "value": 0.952}
+{"ts": "2026-11-08T16:13:26.716+00:00", "level": "INFO", "logger": "email_assistant", "msg": "inbox.ranked", "run_id": "eecae10d", "event": "inbox.ranked", "threads": 36}
+{"ts": "2026-11-08T16:13:26.786+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "guard", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.787+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "triage", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.787+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "supervisor", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.787+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "labeler", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.788+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "supervisor", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.788+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "quarantine", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.789+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "supervisor", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.789+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "policy", "event": "node.done", "latency_ms": 0.0}
+{"ts": "2026-11-08T16:13:26.790+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "execute_auto", "event": "node.done", "latency_ms": 0.6}
+{"ts": "2026-11-08T16:13:26.790+00:00", "level": "INFO", "logger": "email_assistant", "msg": "node.done", "run_id": "eecae10d", "thread_id": "t27-system-override-admin-debug", "node": "execute", "event": "node.done", "latency_ms": 0.0}
+```
+
+`GET /metrics/summary` after the same run (excerpt):
+
+```json
+{
+ "llm": {
+  "calls": 90,
+  "cache_hits": 90,
+  "failures": 0,
+  "input_tokens": 53823,
+  "output_tokens": 9051,
+  "latency_ms_p50": 0.0,
+  "latency_ms_p95": 0.0
+ },
+ "fallbacks": {
+  "scheduler.verify": 2
+ },
+ "human_decisions": {
+  "edit": 1,
+  "reject": 2,
+  "approve": 2
+ },
+ "policy_findings": {
+  "confidential_leak": 1,
+  "confidential_internal": 1
+ },
+ "guard": {
+  "quarantined": 10,
+  "clean": 26
+ },
+ "memory_reuse": {
+  "templates": 0,
+  "examples": 0,
+  "estimated_tokens_saved": 0
+ }
+}
+```
+

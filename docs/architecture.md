@@ -96,9 +96,9 @@ graph TD;
 	classDef last fill:#bfb6fc
 ```
 
-Routing is deterministic: the supervisor reads the triage result and builds a plan (`plan`, `completed` in state), then dispatches the next worker until the plan is empty, then goes to `policy`. A node that raises is wrapped by `traced_node`: the error is appended to `state.errors`, the node is marked completed and the thread continues in degraded form.
+Routing is deterministic: the supervisor reads the triage result and builds a plan (`plan`, `completed` in state), then dispatches the next worker until the plan is empty, then goes to `policy`. Every node is wrapped by `traced_node`. For workers, an exception is appended to `state.errors`, the node is marked completed and the thread continues in degraded form. The safety-critical nodes (`policy`, `execute_auto`, `review`, `revalidate`, `execute`) fail closed: the exception aborts the run, so nothing unvalidated can reach execution.
 
-`review` calls `interrupt()` with a `ReviewRequest`; the checkpoint holds the state until `Command(resume=ReviewResponse)` arrives. `revalidate` re-runs policy on edited actions; a new hard finding routes back to `review`, up to 3 rounds.
+`review` calls `interrupt()` with a `ReviewRequest`; the checkpoint holds the state until `Command(resume=ReviewResponse)` arrives. Before resuming, the orchestrator validates the response: the review round must match, every action id must be pending, edits must pass the strict payload schema (unknown fields and naive datetimes are rejected), and an action with hard findings cannot be approved, only edited or rejected. `revalidate` is the single gate before `execute`: it re-runs policy on every approved or edited approval-tier action; a hard finding routes back to `review` (after 3 rounds the action is blocked). A meeting confirmation and the email announcing it are all-or-nothing.
 
 ## Sequence: meeting request with conflict
 
@@ -168,6 +168,7 @@ stateDiagram-v2
     pending_approval --> rejected: human rejects
     edited --> pending_approval: revalidate finds hard finding
     edited --> executed: revalidate clean
+    approved --> pending_approval: revalidate finds hard finding
     approved --> executed
     approved --> failed
     approved --> skipped: dependency rejected / compensated

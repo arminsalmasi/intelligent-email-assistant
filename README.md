@@ -144,6 +144,8 @@ Once the plan is complete the flow is:
 - **TypedDict state with Pydantic at the boundaries.** Partial updates are cheap; actions use a merge-by-id reducer so an updated action replaces its earlier version.
 - **Checkpoint serializer allow-list.** Only known schema types may be deserialised from the checkpoint store.
 - **Untrusted content wrapping.** Email text is normalised and placed in an `<email_content>` block that prompts declare to be data.
+- **Review path is fail-closed.** Responses are validated before the graph resumes (matching round, known pending actions, strict schema for edits). Hard findings can only be edited or rejected, never approved. Every action about to execute is re-checked by policy. Safety-critical nodes re-raise instead of degrading. A meeting confirmation and the reply announcing it succeed or fail together.
+- **API.** Optional shared-secret auth (`API_KEY` -> `X-API-Key`), a single lock around the in-memory tools, and `round` echoed in review submissions to reject stale or duplicate posts.
 
 ## Memory strategy
 
@@ -207,13 +209,48 @@ Regex and heuristic detection is a first layer, not a guarantee. The design assu
 Modes: `offline` (no LLM, hashing embeddings; rule-based baseline), `replay` (recorded Gemini responses), `live` (real Gemini, refreshes the recordings, optional `--mlflow` logging). Each run auto-approves pending reviews with a simulated reviewer so the executor is exercised.
 Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on a violation. CI runs lint, tests, the offline eval and the replay eval on every push and pull request. A separate manual workflow runs the live eval.
 
-<!-- EVAL_RESULTS -->
+### Results (36 threads, fixed clock)
+
+| Metric | LLM (Gemini, replayed) | Rule-based fallback only |
+|---|---|---|
+| Category accuracy | 0.944 | 0.944 |
+| Urgency accuracy | 0.806 | 0.833 |
+| Needs-reply accuracy | 0.972 | 1.0 |
+| Language detection | 1.0 | 1.0 |
+| Threat recall (10 attacks) | 1.0 | 1.0 |
+| False-positive quarantine rate (26 benign) | 0.0 | 0.0 |
+| Expected-action recall | 0.979 | 0.872 |
+| Forbidden actions proposed | 0 | 0 |
+| Confidential leaks sent | 0 | 0 |
+| Draft must-include rate | 1.0 | 1.0 |
+| Draft must-not violations | 0 | 0 |
+| Drafts with ungrounded claims | 0.0 | 0.0 |
+| Meeting kind (new/reschedule/cancel) | 1.0 | 0.6 |
+| Meetings resolved (slot/alternatives/cancel) | 1.0 | 0.6 |
+| Deadline -> reminder on the right day | 1.0 | 0.667 |
+| Ranking precision@8 | 0.5 | 0.625 |
+| Thread errors | 0 | 0 |
+
+Live run with `gemini-3.1-flash-lite`: 53.8k input / 9.1k output tokens for the whole inbox; LLM call latency p50 733 ms, p95 1.3 s; the scheduler's deterministic verifier rejected 2 model-proposed scheduling decisions (fell back to the rule planner). Reports: `evals/reports/<mode>.{md,json}` (generated, not committed).
+
+What the misses tell us (from `evals/reports/replay.md`):
+- Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but precision@8 of 0.625 shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
+- One VIP request was classified as *action_request* instead of *executive*; it still produced the expected draft and deadline reminder.
+- The rule-based fallback is a safety net: it keeps the pipeline safe (same guard/policy results, 0 leaks) but misses most meetings and deadlines.
+
 
 ## Observability
 
 Structured JSON logs with run, thread and node correlation; a SQLite event store exposed at `/metrics/summary` and `/metrics/events`; optional MLflow or LangSmith tracing; node errors captured into state and telemetry; a per-thread audit trail. See [docs/observability.md](docs/observability.md).
 
-<!-- SCREENSHOTS -->
+| Review queue (policy finding on a confidential figure) | Metrics |
+|---|---|
+| ![review](docs/images/dash_review.png) | ![metrics](docs/images/dash_metrics.png) |
+| **Inbox (ranked)** | **Calendar & reminders** |
+| ![inbox](docs/images/dash_inbox.png) | ![calendar](docs/images/dash_calendar.png) |
+
+Screenshots are from a replay-mode run (recorded Gemini responses) after approving two threads, rejecting one and attempting a leaking edit (bounced back to review).
+
 
 ## API endpoints
 

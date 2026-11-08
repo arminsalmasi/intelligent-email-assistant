@@ -116,17 +116,21 @@ def heuristic_triage(thread: EmailThread, deps: Deps) -> TriageResult:
         bool(re.search(r"(by|before|until|senast|innan|antes del?|due( on| date)?)\s+[\w-]+", text))
         and not bulk
     )
-    return TriageResult(
-        category=cat,
-        urgency=urgency,
-        requires_reply=requires_reply,
-        language=detect_language(msg.body),
-        intent="",
-        meeting_requested=cat == Category.MEETING,
-        deadline_mentioned=deadline,
-        confidence=0.55,
-        reasoning="rule-based fallback",
-        source="heuristic",
+    return apply_post_rules(
+        TriageResult(
+            category=cat,
+            urgency=urgency,
+            requires_reply=requires_reply,
+            language=detect_language(msg.body),
+            intent="",
+            meeting_requested=cat == Category.MEETING,
+            deadline_mentioned=deadline,
+            confidence=0.55,
+            reasoning="rule-based fallback",
+            source="heuristic",
+        ),
+        thread,
+        deps,
     )
 
 
@@ -176,11 +180,29 @@ class TriageAgent:
             if guard.is_threat:
                 return threat_triage(thread, guard), guard
             result.category = heuristic_triage(thread, self.d).category
-        # Deterministic post-rules: VIPs are never below high urgency.
-        sender = self.d.profile.contact((thread.latest_inbound or thread.latest).sender.email)
-        if sender and sender.vip and result.urgency in (Urgency.MEDIUM, Urgency.LOW):
-            result.urgency = Urgency.HIGH
-        return result, guard
+        return apply_post_rules(result, thread, self.d), guard
+
+
+def apply_post_rules(result: TriageResult, thread: EmailThread, deps: Deps) -> TriageResult:
+    """Deterministic facts override model judgement where the answer is structural."""
+    msg = thread.latest_inbound or thread.latest
+    owner = deps.profile.owner.email.lower()
+    cc_only = owner not in {a.email for a in msg.to} and owner in {a.email for a in msg.cc}
+    if thread.awaiting_reply or cc_only:
+        result.requires_reply = False  # our message is last / we are only copied
+    sender = deps.profile.contact(msg.sender.email)
+    if (
+        sender
+        and sender.vip
+        and result.requires_reply
+        and result.urgency
+        in (
+            Urgency.MEDIUM,
+            Urgency.LOW,
+        )
+    ):
+        result.urgency = Urgency.HIGH  # VIP asks for something -> at least today
+    return result
 
 
 URGENCY_WEIGHT = {Urgency.CRITICAL: 100, Urgency.HIGH: 60, Urgency.MEDIUM: 30, Urgency.LOW: 5}

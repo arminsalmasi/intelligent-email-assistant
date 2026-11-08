@@ -88,6 +88,30 @@ GREETING = {"en": "Hi", "sv": "Hej", "es": "Hola"}
 _SENSITIVE_ASK = r"(budget|acquisition|rumou?r|roadmap|revenue|forecast|confidential|headcount)"
 
 
+_GREET = re.compile(r"^((?:hi|hello|hej|hola|dear)\s[^,\n]{1,40},)\s*", re.IGNORECASE)
+
+
+def layout(body: str, sign_off: str) -> str:
+    """Restore email layout when the model returns a single line: greeting,
+    sentence-grouped paragraphs, sign-off on its own lines."""
+    text = body.strip()
+    if "\n" in text:
+        return text
+    greeting = ""
+    m = _GREET.match(text)
+    if m:
+        greeting, text = m.group(1), text[m.end() :]
+    first_line = sign_off.splitlines()[0]
+    idx = text.rfind(first_line)
+    closing = ""
+    if idx > 0:
+        text, closing = text[:idx].strip(), sign_off
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    paras = [" ".join(sentences[i : i + 2]) for i in range(0, len(sentences), 2)]
+    parts = [p for p in (greeting, "\n\n".join(paras), closing) if p]
+    return "\n\n".join(parts)
+
+
 def claim_digits(text: str) -> set[str]:
     return {re.sub(r"\D", "", m) for m in _CLAIM.findall(text) if re.sub(r"\D", "", m)}
 
@@ -212,7 +236,11 @@ class DrafterAgent:
                 purpose="draft",
             )
             if out is not None:
-                body, used, needs = out.body, out.used_fact_keys, out.needs_owner_input
+                body, used, needs = (
+                    layout(out.body, sign_off),
+                    out.used_fact_keys,
+                    out.needs_owner_input,
+                )
             else:
                 body, source = (
                     self._fallback(triage, dec, slot_labels, lang, first, sign_off, msg.body),

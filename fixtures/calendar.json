@@ -1,0 +1,157 @@
+{
+  "events": [
+    {
+      "id": "evt-standup-mon",
+      "title": "AI Platform daily standup",
+      "start": "2026-11-09T09:30:00+01:00",
+      "end": "2026-11-09T09:45:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "priya.shah@northwind.example",
+        "ben.ito@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-standup-tue",
+      "title": "AI Platform daily standup",
+      "start": "2026-11-10T09:30:00+01:00",
+      "end": "2026-11-10T09:45:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "priya.shah@northwind.example",
+        "ben.ito@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-standup-wed",
+      "title": "AI Platform daily standup",
+      "start": "2026-11-11T09:30:00+01:00",
+      "end": "2026-11-11T09:45:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "priya.shah@northwind.example",
+        "ben.ito@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-standup-thu",
+      "title": "AI Platform daily standup",
+      "start": "2026-11-12T09:30:00+01:00",
+      "end": "2026-11-12T09:45:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "priya.shah@northwind.example",
+        "ben.ito@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-standup-fri",
+      "title": "AI Platform daily standup",
+      "start": "2026-11-13T09:30:00+01:00",
+      "end": "2026-11-13T09:45:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "priya.shah@northwind.example",
+        "ben.ito@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-board-meeting",
+      "title": "Board meeting",
+      "start": "2026-11-09T16:00:00+01:00",
+      "end": "2026-11-09T17:00:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "sarah.lind@northwind.example",
+        "jonas.berg@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-board-prep",
+      "title": "Board deck prep with Sarah",
+      "start": "2026-11-10T15:00:00+01:00",
+      "end": "2026-11-10T15:30:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "sarah.lind@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-lumen-payments-sync",
+      "title": "Lumen Payments sync",
+      "start": "2026-11-11T10:00:00+01:00",
+      "end": "2026-11-11T10:30:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "tom.becker@lumen-payments.example"
+      ],
+      "status": "confirmed",
+      "thread_id": "t04-lumen-reschedule-to-thursday"
+    },
+    {
+      "id": "evt-gpucloud-service-review",
+      "title": "GPUCloud service review",
+      "start": "2026-11-13T11:00:00+01:00",
+      "end": "2026-11-13T11:30:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "marcus.vale@gpucloud.example"
+      ],
+      "status": "confirmed",
+      "thread_id": "t05-gpucloud-cancel-friday-review"
+    },
+    {
+      "id": "evt-ben-1on1",
+      "title": "1:1 with Ben",
+      "start": "2026-11-12T10:00:00+01:00",
+      "end": "2026-11-12T10:30:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "ben.ito@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-roadmap-review",
+      "title": "Q1 roadmap review",
+      "start": "2026-11-16T14:00:00+01:00",
+      "end": "2026-11-16T15:00:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "erik.lindqvist@northwind.example",
+        "priya.shah@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    },
+    {
+      "id": "evt-team-retro",
+      "title": "AI Platform retro",
+      "start": "2026-11-19T15:30:00+01:00",
+      "end": "2026-11-19T16:30:00+01:00",
+      "attendees": [
+        "alex.morgan@northwind.example",
+        "priya.shah@northwind.example",
+        "ben.ito@northwind.example",
+        "lars.ek@northwind.example"
+      ],
+      "status": "confirmed",
+      "thread_id": null
+    }
+  ]
+}

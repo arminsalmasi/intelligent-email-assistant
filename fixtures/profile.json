@@ -1,0 +1,334 @@
+{
+  "owner": {
+    "name": "Alex Morgan",
+    "email": "alex.morgan@northwind.example",
+    "title": "Head of AI Platform",
+    "timezone": "Europe/Stockholm"
+  },
+  "org_domains": [
+    "northwind.example"
+  ],
+  "preferences": {
+    "sign_off": "Best,\nAlex",
+    "tone": "Direct, warm, concise. No corporate buzzwords. Short paragraphs.",
+    "working_hours": {
+      "start": "09:00",
+      "end": "18:00",
+      "days": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri"
+      ]
+    },
+    "friday_meeting_cutoff": "16:00",
+    "meeting_buffer_minutes": 15,
+    "default_meeting_minutes": 30,
+    "focus_blocks": [
+      {
+        "day": "tue",
+        "start": "13:00",
+        "end": "15:00"
+      },
+      {
+        "day": "thu",
+        "start": "13:00",
+        "end": "15:00"
+      }
+    ],
+    "follow_up_business_days": 3,
+    "reminder_lead_hours": 24
+  },
+  "contacts": [
+    {
+      "email": "sarah.lind@northwind.example",
+      "name": "Sarah Lind",
+      "organization": "Northwind Gaming",
+      "role": "CFO",
+      "relationship": "internal",
+      "vip": true,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    },
+    {
+      "email": "jonas.berg@northwind.example",
+      "name": "Jonas Berg",
+      "organization": "Northwind Gaming",
+      "role": "CEO",
+      "relationship": "internal",
+      "vip": true,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    },
+    {
+      "email": "daniel.reed@acmetech.example",
+      "name": "Daniel Reed",
+      "organization": "AcmeTech",
+      "role": "Director of Partnerships",
+      "relationship": "partner",
+      "vip": false,
+      "timezone": "America/New_York",
+      "language": "en"
+    },
+    {
+      "email": "tom.becker@lumen-payments.example",
+      "name": "Tom Becker",
+      "organization": "Lumen Payments",
+      "role": "Partner Manager",
+      "relationship": "partner",
+      "vip": false,
+      "timezone": "Europe/London",
+      "language": "en"
+    },
+    {
+      "email": "anna.weiss@lumen-payments.example",
+      "name": "Anna Weiss",
+      "organization": "Lumen Payments",
+      "role": "Solutions Engineer",
+      "relationship": "partner",
+      "vip": false,
+      "timezone": "Europe/London",
+      "language": "en"
+    },
+    {
+      "email": "mikael.strom@royalspin-casino.example",
+      "name": "Mikael Ström",
+      "organization": "RoyalSpin Casino",
+      "role": "Head of Operations",
+      "relationship": "customer",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    },
+    {
+      "email": "helen.cross@goldcrest-casino.example",
+      "name": "Helen Cross",
+      "organization": "Goldcrest Casino",
+      "role": "Product Director",
+      "relationship": "customer",
+      "vip": false,
+      "timezone": "Europe/Malta",
+      "language": "en"
+    },
+    {
+      "email": "priya.shah@northwind.example",
+      "name": "Priya Shah",
+      "organization": "Northwind Gaming",
+      "role": "SRE Lead",
+      "relationship": "internal",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    },
+    {
+      "email": "marcus.vale@gpucloud.example",
+      "name": "Marcus Vale",
+      "organization": "GPUCloud",
+      "role": "Account Executive",
+      "relationship": "vendor",
+      "vip": false,
+      "timezone": "Europe/Berlin",
+      "language": "en"
+    },
+    {
+      "email": "ben.ito@northwind.example",
+      "name": "Ben Ito",
+      "organization": "Northwind Gaming",
+      "role": "Senior ML Engineer",
+      "relationship": "internal",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    },
+    {
+      "email": "hanna.roos@northwind.example",
+      "name": "Hanna Roos",
+      "organization": "Northwind Gaming",
+      "role": "Talent Acquisition Partner",
+      "relationship": "internal",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    },
+    {
+      "email": "erik.lindqvist@northwind.example",
+      "name": "Erik Lindqvist",
+      "organization": "Northwind Gaming",
+      "role": "Product Manager",
+      "relationship": "internal",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "sv"
+    },
+    {
+      "email": "karin.sjoberg@privat-mail.example",
+      "name": "Karin Sjöberg",
+      "organization": "",
+      "role": "Player",
+      "relationship": "customer",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "sv"
+    },
+    {
+      "email": "lucia.fernandez@andinotech.example",
+      "name": "Lucía Fernández",
+      "organization": "AndinoTech",
+      "role": "Partnerships Lead",
+      "relationship": "partner",
+      "vip": false,
+      "timezone": "America/Lima",
+      "language": "es"
+    },
+    {
+      "email": "sam.keller@mailpost.example",
+      "name": "Sam Keller",
+      "organization": "",
+      "role": "Friend",
+      "relationship": "personal",
+      "vip": false,
+      "timezone": "Europe/Stockholm",
+      "language": "en"
+    }
+  ],
+  "facts": [
+    {
+      "key": "q4_gpu_budget",
+      "content": "The Q4 GPU expansion budget is EUR 350,000 (approved by the board on 2026-11-02).",
+      "sensitivity": "confidential",
+      "tags": [
+        "budget",
+        "gpu",
+        "finance"
+      ],
+      "protected_terms": [
+        "350,000",
+        "350 000",
+        "350000",
+        "350k",
+        "EUR 350",
+        "€350"
+      ]
+    },
+    {
+      "key": "acquisition_codename",
+      "content": "Project Aurora is the codename for the planned acquisition of a Nordic sportsbook provider.",
+      "sensitivity": "confidential",
+      "tags": [
+        "m&a",
+        "acquisition"
+      ],
+      "protected_terms": [
+        "Aurora",
+        "acquisition of a Nordic"
+      ]
+    },
+    {
+      "key": "product_launch_date",
+      "content": "The Phoenix live odds engine launches to customers on 2027-01-19, with details internal until the announcement.",
+      "sensitivity": "internal",
+      "tags": [
+        "launch",
+        "product"
+      ],
+      "protected_terms": [
+        "Phoenix",
+        "2027-01-19",
+        "19 January 2027",
+        "January 19"
+      ]
+    },
+    {
+      "key": "support_hours",
+      "content": "Customer support is available 24/7 by chat and Monday to Friday 08:00-20:00 CET by phone.",
+      "sensitivity": "public",
+      "tags": [
+        "support",
+        "hours"
+      ]
+    },
+    {
+      "key": "sla_tiers",
+      "content": "Northwind SLA tiers: tier-1 incidents get a first response within 1 hour, tier-2 within 4 hours, and tier-3 within 1 business day.",
+      "sensitivity": "public",
+      "tags": [
+        "sla",
+        "support"
+      ]
+    },
+    {
+      "key": "status_page",
+      "content": "Live service status is published at https://status.northwind.example.",
+      "sensitivity": "public",
+      "tags": [
+        "status",
+        "incidents"
+      ]
+    },
+    {
+      "key": "oncall_rota",
+      "content": "The platform on-call rota rotates every Monday at 09:00 CET and is maintained in the internal on-call schedule.",
+      "sensitivity": "internal",
+      "tags": [
+        "oncall",
+        "sre"
+      ],
+      "protected_terms": []
+    },
+    {
+      "key": "board_deck_time",
+      "content": "The board deck is presented on 2026-11-09 at 16:00 CET.",
+      "sensitivity": "confidential",
+      "tags": [
+        "board",
+        "finance"
+      ],
+      "protected_terms": []
+    },
+    {
+      "key": "gpucloud_negotiation",
+      "content": "The GPUCloud reserved capacity contract is under negotiation, with an offered discount of 8% for a 24-month term.",
+      "sensitivity": "confidential",
+      "tags": [
+        "vendor",
+        "contract"
+      ],
+      "protected_terms": [
+        "8% discount",
+        "discount of 8%",
+        "24-month"
+      ]
+    },
+    {
+      "key": "hq_location",
+      "content": "Northwind Gaming is headquartered in Stockholm and has a satellite office in Malta.",
+      "sensitivity": "public",
+      "tags": [
+        "company",
+        "office"
+      ]
+    },
+    {
+      "key": "ai_platform_team",
+      "content": "The AI Platform team has 14 engineers and owns fraud detection, player scoring, and the inference clusters.",
+      "sensitivity": "internal",
+      "tags": [
+        "team",
+        "ai"
+      ],
+      "protected_terms": [
+        "14 engineers"
+      ]
+    },
+    {
+      "key": "withdrawal_policy",
+      "content": "Standard withdrawals are processed within 24 hours, with additional verification checks possible for large amounts.",
+      "sensitivity": "public",
+      "tags": [
+        "payments",
+        "withdrawals"
+      ]
+    }
+  ]
+}

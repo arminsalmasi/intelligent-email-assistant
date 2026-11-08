@@ -1,0 +1,50 @@
+[project]
+name = "email-assistant"
+version = "0.2.0"
+description = "Agentic email assistant: LangGraph orchestrator + tool-using workers, dual memory, guardrails and human-in-the-loop approval."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=1.2,<2",
+    "langgraph-checkpoint-sqlite>=3.1",
+    "langchain-core>=1.7,<2",
+    "langchain-google-genai>=4.4",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-dotenv>=1.0",
+    "rich>=13.9",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+bedrock = ["langchain-aws>=1.9"]
+dashboard = ["streamlit>=1.40", "pandas>=2.2"]
+tracing = ["mlflow>=3.0"]
+dev = ["pytest>=8.3", "ruff>=0.7"]
+
+[project.scripts]
+email-assistant = "email_assistant.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["email_assistant", "evals"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501", "RUF001", "RUF002", "RUF003", "SIM102", "B039"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["RUF012"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

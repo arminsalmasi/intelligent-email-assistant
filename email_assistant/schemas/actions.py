@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
 
 
 class ActionType(StrEnum):
@@ -61,13 +61,19 @@ class ActionStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class _Payload(BaseModel):
+    """Strict: unknown fields (e.g. a typo in a human edit) are rejected, not ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class Attachment(BaseModel):
     filename: str
     content_type: str
     content: str
 
 
-class SendEmailPayload(BaseModel):
+class SendEmailPayload(_Payload):
     kind: Literal["send_email"] = "send_email"
     to: list[str]
     cc: list[str] = Field(default_factory=list)
@@ -80,58 +86,58 @@ class SendEmailPayload(BaseModel):
     ungrounded_claims: list[str] = Field(default_factory=list)
 
 
-class CalendarHoldPayload(BaseModel):
+class CalendarHoldPayload(_Payload):
     kind: Literal["calendar_hold"] = "calendar_hold"
     hold_id: str
     title: str
-    start: datetime
+    start: AwareDatetime
     end: datetime
     attendees: list[str] = Field(default_factory=list)
 
 
-class CalendarConfirmPayload(BaseModel):
+class CalendarConfirmPayload(_Payload):
     kind: Literal["calendar_confirm"] = "calendar_confirm"
     hold_id: str
     title: str
-    start: datetime
+    start: AwareDatetime
     end: datetime
     attendees: list[str] = Field(default_factory=list)
 
 
-class CalendarUpdatePayload(BaseModel):
+class CalendarUpdatePayload(_Payload):
     kind: Literal["calendar_update"] = "calendar_update"
     event_id: str
-    start: datetime
+    start: AwareDatetime
     end: datetime
 
 
-class CalendarCancelPayload(BaseModel):
+class CalendarCancelPayload(_Payload):
     kind: Literal["calendar_cancel"] = "calendar_cancel"
     event_id: str
     reason: str = ""
 
 
-class ReminderPayload(BaseModel):
+class ReminderPayload(_Payload):
     kind: Literal["create_reminder"] = "create_reminder"
     title: str
-    due: datetime
+    due: AwareDatetime
     reminder_type: Literal["deadline", "awaiting_reply", "follow_up", "payment"] = "deadline"
-    deadline: datetime | None = None  # the underlying deadline (due = deadline - lead time)
+    deadline: AwareDatetime | None = None  # the underlying deadline (due = deadline - lead time)
     notes: str = ""
 
 
-class LabelsPayload(BaseModel):
+class LabelsPayload(_Payload):
     kind: Literal["apply_labels"] = "apply_labels"
     labels: list[str]
     mark_read: bool = True
 
 
-class ArchivePayload(BaseModel):
+class ArchivePayload(_Payload):
     kind: Literal["archive"] = "archive"
     reason: str
 
 
-class QuarantinePayload(BaseModel):
+class QuarantinePayload(_Payload):
     kind: Literal["quarantine"] = "quarantine"
     reason: str
     risk_score: float = Field(ge=0.0, le=1.0)
@@ -157,6 +163,18 @@ class PolicyFinding(BaseModel):
     code: str
     severity: Literal["hard", "soft"]
     message: str
+
+
+def apply_edits(action: ProposedAction, edits: dict) -> ActionPayload:
+    """Merge human edits into a payload with strict validation.
+
+    Raises ValueError for unknown fields or values that fail the payload schema.
+    """
+    current = action.payload.model_dump()
+    unknown = set(edits) - set(current)
+    if unknown:
+        raise ValueError(f"unknown field(s) for {action.payload.kind}: {sorted(unknown)}")
+    return PAYLOAD_ADAPTER.validate_python({**current, **edits})
 
 
 def stable_key(*parts: object) -> str:
@@ -205,7 +223,8 @@ class ProposedAction(BaseModel):
         side effects."""
         kind = payload.kind  # type: ignore[attr-defined]
         identity = payload.model_dump(
-            mode="json", exclude={"body", "used_facts", "ungrounded_claims", "attachments"}
+            mode="json",
+            exclude={"body", "used_facts", "ungrounded_claims", "attachments", "due", "notes"},
         )
         key = stable_key(thread_id, kind, identity)
         return cls(

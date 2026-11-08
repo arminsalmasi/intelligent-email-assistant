@@ -23,7 +23,6 @@ from email_assistant.agents.triage import TriageAgent
 from email_assistant.deps import Deps
 from email_assistant.observability.tracing import traced_node
 from email_assistant.schemas.actions import (
-    PAYLOAD_ADAPTER,
     ActionStatus,
     ActionType,
     ArchivePayload,
@@ -32,6 +31,7 @@ from email_assistant.schemas.actions import (
     QuarantinePayload,
     RiskTier,
     SendEmailPayload,
+    apply_edits,
 )
 from email_assistant.schemas.review import ReviewRequest, ReviewResponse
 from email_assistant.schemas.scheduling import TimeSlot
@@ -227,6 +227,12 @@ class ThreadGraph:
             if dec is None:
                 continue  # stays pending -> asked again
             self.d.telemetry.record("human_decision", dec.decision, action_type=a.type.value)
+            if dec.decision == "approve" and a.has_hard_violation:
+                # Hard findings cannot be approved away - only edited or rejected.
+                audit.append(
+                    _audit("approve_refused", action=a.id, findings=[f.code for f in a.findings])
+                )
+                continue
             if dec.decision == "approve":
                 updated[a.id] = a.model_copy(
                     update={"status": ActionStatus.APPROVED, "human_comment": dec.comment}
@@ -236,13 +242,16 @@ class ThreadGraph:
                     update={"status": ActionStatus.REJECTED, "human_comment": dec.comment}
                 )
             else:
-                merged = {**a.payload.model_dump(), **dec.edits}
-                payload = PAYLOAD_ADAPTER.validate_python(merged)  # schema-validated edit
-                original = a.payload.body if isinstance(a.payload, SendEmailPayload) else None
-                if isinstance(payload, SendEmailPayload):
-                    payload = payload.model_copy(
-                        update={"ungrounded_claims": [], "draft_source": "human_edit"}
-                    )
+                # Edits were validated against the payload schema before resuming
+                # (orchestrator.validate_review); this is the same strict check.
+                payload = apply_edits(a, dec.edits)
+                original = None
+                if isinstance(a.payload, SendEmailPayload):
+                    original = a.original_body or a.payload.body  # keep the model's draft
+                    if isinstance(payload, SendEmailPayload) and payload.body != a.payload.body:
+                        payload = payload.model_copy(
+                            update={"ungrounded_claims": [], "draft_source": "human_edit"}
+                        )
                 updated[a.id] = a.model_copy(
                     update={
                         "payload": payload,
@@ -265,10 +274,15 @@ class ThreadGraph:
         return {"actions": updated, "review_round": rnd, "audit": audit}
 
     def revalidate(self, s: ThreadState) -> dict:
-        """Edited actions go through policy again; new hard findings send them back."""
+        """Single gate before execution: every approval-tier action that is about to
+        run (approved or edited) goes through policy again; hard findings send it
+        back to review (or block it after MAX_REVIEW_ROUNDS)."""
         updated, audit = {}, []
         for a in s["actions"].values():
-            if a.status != ActionStatus.EDITED:
+            if a.risk_tier != RiskTier.APPROVAL or a.status not in (
+                ActionStatus.APPROVED,
+                ActionStatus.EDITED,
+            ):
                 continue
             findings = self.d.policy.evaluate(a, s["thread"])
             if any(f.severity == "hard" for f in findings):
@@ -305,7 +319,7 @@ class ThreadGraph:
             if a.type != ActionType.SEND_EMAIL or a.status != ActionStatus.EXECUTED:
                 continue
             p: SendEmailPayload = a.payload  # type: ignore[assignment]
-            audience = d.audience(p.to)
+            audience = d.audience(p.to + p.cc)
             edited = a.original_body is not None and a.original_body != p.body
             d.episodic.record(thread, triage, p.body, audience, edited)
             if edited:
@@ -342,6 +356,9 @@ class ThreadGraph:
         actions = dict(s.get("actions", {}))
         updated, audit = {}, []
         sent_this_thread = 0
+        if compensate:
+            updated.update(self._pair_meeting_reply(actions))
+            actions.update(updated)
         for a in sorted(actions.values(), key=lambda x: (len(x.depends_on), x.id)):
             if a.risk_tier not in tiers or a.status not in (
                 ActionStatus.APPROVED,
@@ -358,9 +375,9 @@ class ThreadGraph:
                     update={"status": ActionStatus.SKIPPED, "error": "dependency not executed"}
                 )
                 continue
-            if a.risk_tier == RiskTier.APPROVAL:
+            if a.type == ActionType.SEND_EMAIL:
                 sent_this_thread += 1
-                if sent_this_thread > d.settings.max_outbound_per_run:
+                if sent_this_thread > d.settings.max_outbound_per_thread:
                     updated[a.id] = a.model_copy(
                         update={"status": ActionStatus.BLOCKED, "error": "rate limit"}
                     )
@@ -384,6 +401,26 @@ class ThreadGraph:
             if a.status in (ActionStatus.REJECTED, ActionStatus.BLOCKED) and a.id not in updated:
                 d.telemetry.record("action", f"{a.type.value}:{a.status.value}")
         return {"actions": updated, "audit": audit}
+
+    @staticmethod
+    def _pair_meeting_reply(actions: dict[str, ProposedAction]) -> dict[str, ProposedAction]:
+        """A meeting confirmation and the reply announcing it are all-or-nothing:
+        if the human rejects (or policy blocks) one, the other is skipped too."""
+        dead = {ActionStatus.REJECTED, ActionStatus.BLOCKED}
+        confirm = next((a for a in actions.values() if a.type == ActionType.CALENDAR_CONFIRM), None)
+        email = next((a for a in actions.values() if a.type == ActionType.SEND_EMAIL), None)
+        if not confirm or not email:
+            return {}
+        out = {}
+        for x, y in ((confirm, email), (email, confirm)):
+            if x.status in dead and y.status in (ActionStatus.APPROVED, ActionStatus.EDITED):
+                out[y.id] = y.model_copy(
+                    update={
+                        "status": ActionStatus.SKIPPED,
+                        "error": f"paired {x.type.value} was {x.status.value}",
+                    }
+                )
+        return out
 
     def _compensate(self, actions: dict[str, ProposedAction], s: ThreadState) -> list[dict]:
         """Release tentative holds whose follow-up was rejected or blocked."""
@@ -492,8 +529,11 @@ class ThreadGraph:
             "execute": self.execute,
             "learn": self.learn,
         }
+        critical = {"policy", "execute_auto", "review", "revalidate", "execute"}
         for name, fn in nodes.items():
-            g.add_node(name, traced_node(name, t)(fn))
+            # Workers degrade gracefully; safety-critical nodes fail closed (the
+            # exception aborts the run, nothing unvalidated can reach execute).
+            g.add_node(name, traced_node(name, t, reraise=name in critical)(fn))
         g.add_edge(START, "guard")
         g.add_edge("guard", "triage")
         g.add_edge("triage", "supervisor")

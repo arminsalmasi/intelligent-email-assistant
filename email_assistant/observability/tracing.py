@@ -23,7 +23,7 @@ from email_assistant.observability.logging import log_context, log_event
 from email_assistant.observability.metrics import Telemetry
 
 
-def traced_node(name: str, telemetry: Telemetry) -> Callable:
+def traced_node(name: str, telemetry: Telemetry, reraise: bool = False) -> Callable:
     def decorator(fn: Callable[[dict], dict]) -> Callable[[dict], dict]:
         @functools.wraps(fn)
         def wrapper(state: dict, *args: Any, **kwargs: Any) -> dict:
@@ -45,6 +45,8 @@ def traced_node(name: str, telemetry: Telemetry) -> Callable:
                     telemetry.record("node", name, ms, ok=False)
                     telemetry.record("error", name, error=type(exc).__name__, detail=str(exc)[:300])
                     log_event("node.failed", logging.ERROR, error=repr(exc)[:300])
+                    if reraise:
+                        raise
                     return {"errors": [f"{name}: {type(exc).__name__}: {exc}"], "completed": [name]}
                 ms = (time.perf_counter() - started) * 1000
                 telemetry.record("node", name, ms, ok=True)

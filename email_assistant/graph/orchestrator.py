@@ -11,12 +11,12 @@ from datetime import datetime
 from typing import Any, Literal
 
 from langgraph.types import Command
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from email_assistant.agents.triage import TriageAgent, priority_score
 from email_assistant.deps import Deps
 from email_assistant.observability.logging import log_context, log_event
-from email_assistant.schemas.actions import ActionStatus, ProposedAction
+from email_assistant.schemas.actions import ActionStatus, ProposedAction, apply_edits
 from email_assistant.schemas.review import ReviewRequest, ReviewResponse
 from email_assistant.schemas.state import GuardResult
 from email_assistant.schemas.triage import ThreadSummary, TriageResult
@@ -38,6 +38,12 @@ class InboxItem(BaseModel):
     actions: list[ProposedAction] = []
     errors: list[str] = []
     review: ReviewRequest | None = None
+    message_id: str = ""  # latest message processed; a new message re-opens the thread
+    attempt: int = 0
+
+
+class ReviewRejected(ValueError):
+    """The submitted review cannot be applied (stale round, unknown action, bad edit)."""
 
 
 class InboxOrchestrator:
@@ -49,14 +55,25 @@ class InboxOrchestrator:
         self.items: dict[str, InboxItem] = {}
 
     def _config(self, thread_id: str) -> dict:
-        return {"configurable": {"thread_id": f"{thread_id}@{self.run_id}"}}
+        attempt = self.items[thread_id].attempt if thread_id in self.items else 0
+        return {"configurable": {"thread_id": f"{thread_id}@{self.run_id}#{attempt}"}}
+
+    def _needs_processing(self, thread_id: str, latest_id: str) -> bool:
+        item = self.items.get(thread_id)
+        if item is None:
+            return True
+        if item.status == "pending_review":
+            return False  # never restart a thread a human is reviewing
+        return item.status == "error" or item.message_id != latest_id
 
     # --------------------------------------------------------------- intake
     def process_inbox(self, limit: int | None = None) -> list[InboxItem]:
         d = self.d
         now = d.clock.now()
         with log_context(run_id=self.run_id):
-            threads = [t for t in d.mail.list_threads() if t.id not in self.items]
+            threads = [
+                t for t in d.mail.list_threads() if self._needs_processing(t.id, t.latest.id)
+            ]
             for t in threads:  # counterpart answered -> close awaiting-reply reminders
                 if t.latest.direction == "inbound":
                     d.reminders.resolve_awaiting_reply(t.id, t.latest.sent_at)
@@ -75,7 +92,10 @@ class InboxOrchestrator:
             log_event("inbox.ranked", threads=len(triaged))
             for rank, (score, t, tri, guard) in enumerate(triaged, 1):
                 msg = t.latest_inbound or t.latest
+                prev = self.items.get(t.id)
                 self.items[t.id] = InboxItem(
+                    message_id=t.latest.id,
+                    attempt=prev.attempt + 1 if prev else 0,
                     thread_id=t.id,
                     subject=t.subject,
                     sender=msg.sender.display(),
@@ -137,10 +157,30 @@ class InboxOrchestrator:
     def pending_reviews(self) -> list[ReviewRequest]:
         return [i.review for i in self.ranked() if i.review is not None]
 
+    def validate_review(self, item: InboxItem, response: ReviewResponse) -> None:
+        """Reject stale, mismatched or invalid submissions BEFORE resuming the graph."""
+        review = item.review
+        assert review is not None
+        if response.round is not None and response.round != review.round:
+            raise ReviewRejected(f"stale review: round {response.round} != {review.round}")
+        pending = {a.id: a for a in review.actions}
+        for dec in response.decisions:
+            action = pending.get(dec.action_id)
+            if action is None:
+                raise ReviewRejected(f"unknown or non-pending action {dec.action_id}")
+            if dec.decision == "approve" and action.has_hard_violation:
+                raise ReviewRejected(f"{dec.action_id} has hard policy findings; edit or reject it")
+            if dec.decision == "edit":
+                try:
+                    apply_edits(action, dec.edits)
+                except (ValueError, ValidationError) as exc:
+                    raise ReviewRejected(f"invalid edit for {dec.action_id}: {exc}") from exc
+
     def submit_review(self, thread_id: str, response: ReviewResponse) -> InboxItem:
         item = self.items.get(thread_id)
         if item is None or item.status != "pending_review":
             raise KeyError(f"no pending review for {thread_id}")
+        self.validate_review(item, response)
         with log_context(run_id=self.run_id, thread_id=thread_id):
             log_event("review.submitted", decisions=[d.decision for d in response.decisions])
             self._run(thread_id, Command(resume=response.model_dump(mode="json")))

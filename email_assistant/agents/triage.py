@@ -37,7 +37,7 @@ notifications that need no answer, and threats.
 _BULK = {
     Category.NEWSLETTER: r"(unsubscribe|newsletter|this week in|weekly digest|avsluta prenumeration|darse de baja)",
     Category.SPAM: r"(lottery|you have won|winner|claim your prize|\bbtc\b|crypto wallet|passport photo)",
-    Category.MARKETING: r"(% off|\bdiscount\b|promo|limited[- ]time|offer ends|oferta|descuento|rea\b|erbjudande|upgrade now)",
+    Category.MARKETING: r"(% off|\bdiscount\b|\bpromo|limited[- ]time|offer ends|\boferta\b|descuento|\brea\b|erbjudande|upgrade now)",
 }
 _MEETING = (
     r"(reschedule|move (it|our|the) (meeting|sync|call)|cancel (our|the)|"

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-assistant-api
+  labels: {app: email-assistant, component: api}
+spec:
+  # Single replica on purpose: the prototype keeps checkpoints and memory in
+  # SQLite on a local volume. Scaling out requires PostgresSaver + a shared
+  # memory store (RDS/pgvector) - see README "Production on AWS".
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: email-assistant, component: api}
+  template:
+    metadata:
+      labels: {app: email-assistant, component: api}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      containers:
+        - name: api
+          image: ghcr.io/your-org/email-assistant:0.2.0
+          ports: [{containerPort: 8000, name: http}]
+          envFrom:
+            - configMapRef: {name: email-assistant-config}
+            - secretRef: {name: email-assistant-secrets}
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /app/data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: email-assistant-data}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: email-assistant-data
+  labels: {app: email-assistant}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-assistant-api
+  labels: {app: email-assistant, component: api}
+spec:
+  selector: {app: email-assistant, component: api}
+  ports: [{port: 80, targetPort: http, name: http}]

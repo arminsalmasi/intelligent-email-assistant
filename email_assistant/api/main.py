@@ -7,14 +7,14 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from email_assistant.config import get_settings
-from email_assistant.graph.orchestrator import InboxItem
+from email_assistant.graph.orchestrator import InboxItem, ReviewRejected
 from email_assistant.schemas.review import ReviewRequest, ReviewResponse
 from email_assistant.service import AssistantService
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # one writer/reader at a time: the mock tools are in-memory
 _svc: AssistantService | None = None
 
 
@@ -49,7 +49,7 @@ class ProcessResult(BaseModel):
     quarantined: int
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[])
 def health() -> dict[str, Any]:
     return {"status": "ok"}
 
@@ -69,8 +69,8 @@ def ready() -> dict[str, Any]:
 
 @app.post("/inbox/process", response_model=ProcessResult)
 def process_inbox() -> ProcessResult:
-    s = service()
     with _lock:
+        s = service()
         items = s.orchestrator.process_inbox()
     return ProcessResult(
         processed=len(items),
@@ -81,11 +81,17 @@ def process_inbox() -> ProcessResult:
 
 @app.get("/inbox", response_model=list[InboxItem])
 def inbox() -> list[InboxItem]:
-    return service().orchestrator.ranked()
+    with _lock:
+        return [i.model_copy(deep=True) for i in service().orchestrator.ranked()]
 
 
 @app.get("/threads/{thread_id}")
 def thread(thread_id: str) -> dict[str, Any]:
+    with _lock:
+        return _thread(thread_id)
+
+
+def _thread(thread_id: str) -> dict[str, Any]:
     s = service()
     t = s.deps.mail.get_thread(thread_id)
     if t is None:
@@ -100,19 +106,20 @@ def thread(thread_id: str) -> dict[str, Any]:
 
 @app.get("/reviews", response_model=list[ReviewRequest])
 def reviews() -> list[ReviewRequest]:
-    return service().orchestrator.pending_reviews()
+    with _lock:
+        return [r.model_copy(deep=True) for r in service().orchestrator.pending_reviews()]
 
 
 @app.post("/reviews/{thread_id}", response_model=InboxItem)
 def submit_review(thread_id: str, response: ReviewResponse) -> InboxItem:
-    s = service()
     with _lock:
+        s = service()
         try:
             return s.orchestrator.submit_review(thread_id, response)
         except KeyError as exc:
             raise HTTPException(409, str(exc)) from exc
-        except ValidationError as exc:
-            raise HTTPException(422, exc.errors()) from exc
+        except ReviewRejected as exc:
+            raise HTTPException(422, str(exc)) from exc
 
 
 @app.get("/calendar")

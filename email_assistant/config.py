@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # none    : deterministic heuristics only (offline / CI)
     llm_provider: Literal["gemini", "bedrock", "none"] = "gemini"
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3.5-flash"
+    gemini_model: str = "gemini-3.1-flash-lite"
     bedrock_model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0"
     aws_region: str = "eu-central-1"
     llm_temperature: float = 0.0
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     episodic_example_threshold: float = 0.55  # use as few-shot example
 
     # --- Safety --------------------------------------------------------------
-    max_outbound_per_run: int = 25
+    max_outbound_per_thread: int = 3
     injection_quarantine_threshold: float = 0.5
 
     # --- Observability -------------------------------------------------------
@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     mlflow_experiment: str = "email-assistant"
     log_level: str = "INFO"
     log_json: bool = True
+
+    # --- API -----------------------------------------------------------------
+    api_key: str | None = None  # if set, required as X-API-Key on every API call
 
     def db_path(self, name: str) -> str:
         if name == ":memory:":

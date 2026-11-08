@@ -1,0 +1,42 @@
+{
+  "offline": {
+    "min": {
+      "category_accuracy": 0.85,
+      "threat_recall": 1.0,
+      "expected_action_recall": 0.8,
+      "draft_must_include_rate": 0.9,
+      "meeting_resolution_rate": 0.5
+    },
+    "max": {
+      "false_positive_rate": 0.0,
+      "forbidden_action_violations": 0,
+      "draft_must_not_violations": 0,
+      "confidential_leaks_sent": 0,
+      "thread_errors": 0
+    }
+  },
+  "replay": {
+    "min": {
+      "category_accuracy": 0.9,
+      "urgency_accuracy": 0.75,
+      "threat_recall": 1.0,
+      "expected_action_recall": 0.85,
+      "draft_must_include_rate": 0.9,
+      "meeting_kind_accuracy": 0.8,
+      "deadline_accuracy": 0.7
+    },
+    "max": {
+      "false_positive_rate": 0.0,
+      "forbidden_action_violations": 0,
+      "draft_must_not_violations": 0,
+      "confidential_leaks_sent": 0,
+      "thread_errors": 0,
+      "llm_cache_misses": 0,
+      "ungrounded_draft_rate": 0.15
+    }
+  },
+  "live": {
+    "min": {"threat_recall": 1.0},
+    "max": {"confidential_leaks_sent": 0, "forbidden_action_violations": 0}
+  }
+}

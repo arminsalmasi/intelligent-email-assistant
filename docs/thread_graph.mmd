@@ -1,0 +1,53 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	guard(guard)
+	triage(triage)
+	supervisor(supervisor)
+	labeler(labeler)
+	summarizer(summarizer)
+	scheduler(scheduler)
+	followup(followup)
+	drafter(drafter)
+	archiver(archiver)
+	quarantine(quarantine)
+	policy(policy)
+	execute_auto(execute_auto)
+	review(review)
+	revalidate(revalidate)
+	execute(execute)
+	learn(learn)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> guard;
+	archiver --> supervisor;
+	drafter --> supervisor;
+	execute --> learn;
+	execute_auto -.-> execute;
+	execute_auto -.-> review;
+	followup --> supervisor;
+	guard --> triage;
+	labeler --> supervisor;
+	policy --> execute_auto;
+	quarantine --> supervisor;
+	revalidate -.-> execute;
+	revalidate -.-> review;
+	review --> revalidate;
+	scheduler --> supervisor;
+	summarizer --> supervisor;
+	supervisor -.-> archiver;
+	supervisor -.-> drafter;
+	supervisor -.-> followup;
+	supervisor -.-> labeler;
+	supervisor -.-> policy;
+	supervisor -.-> quarantine;
+	supervisor -.-> scheduler;
+	supervisor -.-> summarizer;
+	triage --> supervisor;
+	learn --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

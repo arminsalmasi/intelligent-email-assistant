@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-assistant-dashboard
+  labels: {app: email-assistant, component: dashboard}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: email-assistant, component: dashboard}
+  template:
+    metadata:
+      labels: {app: email-assistant, component: dashboard}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: dashboard
+          image: ghcr.io/your-org/email-assistant:0.2.0
+          command: ["streamlit", "run", "dashboard/app.py", "--server.address=0.0.0.0",
+                    "--server.port=8501", "--server.headless=true"]
+          env:
+            - {name: ASSISTANT_API_URL, value: "http://email-assistant-api"}
+          ports: [{containerPort: 8501, name: http}]
+          readinessProbe:
+            httpGet: {path: /_stcore/health, port: http}
+            initialDelaySeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-assistant-dashboard
+  labels: {app: email-assistant, component: dashboard}
+spec:
+  selector: {app: email-assistant, component: dashboard}
+  ports: [{port: 80, targetPort: http, name: http}]

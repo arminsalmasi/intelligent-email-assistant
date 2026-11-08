@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: email-assistant-config
+  labels: {app: email-assistant}
+data:
+  LLM_PROVIDER: "gemini"            # "bedrock" in AWS (IRSA role instead of a key)
+  EMBEDDING_PROVIDER: "gemini"
+  TRACING_BACKEND: "mlflow"
+  MLFLOW_TRACKING_URI: "http://mlflow.observability.svc:5000"
+  LOG_JSON: "true"
+  FIXED_NOW: ""                     # real clock outside the demo

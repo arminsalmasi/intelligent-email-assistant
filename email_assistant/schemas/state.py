@@ -16,7 +16,6 @@ from typing_extensions import TypedDict
 
 from email_assistant.schemas.actions import ProposedAction
 from email_assistant.schemas.email import EmailThread
-from email_assistant.schemas.memory import MemoryHit
 from email_assistant.schemas.scheduling import SchedulingDecision
 from email_assistant.schemas.triage import ThreadSummary, TriageResult
 
@@ -44,10 +43,8 @@ class ThreadState(TypedDict, total=False):
     summary: ThreadSummary
     plan: list[str]
     completed: Annotated[list[str], operator.add]
-    memories: list[MemoryHit]
     scheduling: SchedulingDecision
     actions: Annotated[dict[str, ProposedAction], merge_actions]
     review_round: int
-    pending_review: bool
     audit: Annotated[list[dict[str, Any]], operator.add]
     errors: Annotated[list[str], operator.add]

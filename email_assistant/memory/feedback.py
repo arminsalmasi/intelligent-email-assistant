@@ -78,8 +78,10 @@ class FeedbackMemory:
             learned.append(f"sign_off:{audience}")
         return learned
 
-    def lessons(self, query: str, category: str, k: int = 2) -> list[MemoryHit]:
+    def lessons(self, query: str, category: str, audience: str, k: int = 2) -> list[MemoryHit]:
         hits = self.store.search(query, k=6, kind=MemoryKind.PROCEDURAL, namespaces=["edits"])
+        # never show an internal correction (may contain internal facts) to an external draft
+        hits = [h for h in hits if h.record.metadata.get("audience") == audience]
         same = [h for h in hits if h.record.metadata.get("category") == category]
         return (same or hits)[:k]
 

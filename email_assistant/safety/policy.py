@@ -7,12 +7,12 @@ justification that is written to the audit trail.
 
 from __future__ import annotations
 
-from datetime import datetime
+import re
 
 from email_assistant.memory.store import MemoryStore
 from email_assistant.schemas.actions import (
     RISK_TIERS,
-    ActionType,
+    CalendarCancelPayload,
     CalendarConfirmPayload,
     CalendarHoldPayload,
     CalendarUpdatePayload,
@@ -85,6 +85,17 @@ class PolicyEngine:
                         message=f"Attendees not in thread: {unknown}",
                     )
                 )
+        if isinstance(p, CalendarUpdatePayload | CalendarCancelPayload):
+            ev = self.calendar.get(p.event_id)
+            if ev is None or ev.thread_id != thread.id or ev.status != "confirmed":
+                f.append(
+                    PolicyFinding(
+                        code="event_not_linked",
+                        severity="hard",
+                        message=f"Event {p.event_id} does not exist or does not belong to "
+                        "this conversation; only the linked meeting may be changed.",
+                    )
+                )
         elif isinstance(p, ReminderPayload) and not p.title.strip():
             f.append(PolicyFinding(code="empty_title", severity="hard", message="Empty title"))
         return f
@@ -115,7 +126,10 @@ class PolicyEngine:
                     "to existing participants.",
                 )
             )
-        body = p.body.lower() + "\n" + p.subject.lower()
+        # Scan body, subject and text attachments; also a digit-normalised copy so
+        # "350.000", "350 000" or "350,000" all match the protected term "350000".
+        raw = "\n".join([p.body, p.subject, *(a.content for a in p.attachments)]).lower()
+        body = raw + "\n" + re.sub(r"(?<=\d)[\s\u00a0.,'’](?=\d)", "", raw)
         external = self._external(recipients)
         if external:
             leaks = {
@@ -172,18 +186,4 @@ class PolicyEngine:
         return f
 
 
-def outbound_budget_exceeded(sent_this_run: int, limit: int) -> PolicyFinding | None:
-    if sent_this_run >= limit:
-        return PolicyFinding(
-            code="rate_limit",
-            severity="hard",
-            message=f"Outbound limit of {limit} actions per run reached",
-        )
-    return None
-
-
-def is_past(dt: datetime, now: datetime) -> bool:
-    return dt < now
-
-
-__all__ = ["ActionType", "PolicyEngine", "outbound_budget_exceeded"]
+__all__ = ["PolicyEngine"]

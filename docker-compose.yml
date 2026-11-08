@@ -1,0 +1,33 @@
+services:
+  api:
+    build: .
+    image: email-assistant:local
+    ports: ["8000:8000"]
+    env_file: [.env]
+    environment:
+      TRACING_BACKEND: mlflow
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes: ["assistant-data:/app/data"]
+    depends_on: [mlflow]
+
+  dashboard:
+    image: email-assistant:local
+    command: ["streamlit", "run", "dashboard/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    ports: ["8501:8501"]
+    environment:
+      ASSISTANT_API_URL: http://api:8000
+    healthcheck:
+      disable: true
+    depends_on: [api]
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.1.0
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000",
+              "--backend-store-uri", "sqlite:////mlflow/mlflow.db",
+              "--default-artifact-root", "/mlflow/artifacts"]
+    ports: ["5000:5000"]
+    volumes: ["mlflow-data:/mlflow"]
+
+volumes:
+  assistant-data:
+  mlflow-data:

@@ -174,25 +174,41 @@ class SchedulerAgent:
         req: MeetingRequest,
         attendee_tz: str | None,
     ) -> list[str]:
+        """Deterministic acceptance test for a model-proposed decision."""
+        try:
+            return self._verify(dec, thread, attendee_tz)
+        except Exception as exc:  # e.g. naive datetimes from the model
+            return [f"invalid_decision:{type(exc).__name__}"]
+
+    def _verify(
+        self, dec: SchedulingDecision, thread: EmailThread, attendee_tz: str | None
+    ) -> list[str]:
         problems = []
         cal = self.d.calendar
         linked = cal.find_by_thread(thread.id)
         ignore = {linked.id} if linked else None
-        if dec.kind in ("reschedule", "cancel"):
+        # Only the event linked to THIS thread may ever be moved or cancelled.
+        touches_event = dec.kind in ("reschedule", "cancel") or dec.outcome == "cancel"
+        if touches_event or dec.linked_event_id:
             if not linked or dec.linked_event_id != linked.id:
                 problems.append("linked_event_mismatch")
-        if dec.outcome in ("accept_requested",) or (dec.kind == "reschedule" and dec.chosen):
+        if dec.outcome == "cancel" and dec.kind != "cancel":
+            problems.append("inconsistent_kind")
+        if dec.outcome == "accept_requested" or (dec.kind == "reschedule" and dec.chosen):
             if not dec.chosen:
                 problems.append("missing_chosen_slot")
-            elif not cal.check_slot(dec.chosen, attendee_tz=attendee_tz, ignore=ignore).ok:
+            elif (
+                dec.chosen.start < self.d.clock.now()
+                or not cal.check_slot(dec.chosen, attendee_tz=attendee_tz, ignore=ignore).ok
+            ):
                 problems.append("chosen_slot_invalid")
         if dec.outcome == "propose_alternatives":
-            if len(dec.alternatives) < 1:
+            if not dec.alternatives:
                 problems.append("no_alternatives")
-            for s in dec.alternatives:
+            for slot in dec.alternatives:
                 if (
-                    s.start < self.d.clock.now()
-                    or not cal.check_slot(s, attendee_tz=attendee_tz, ignore=ignore).ok
+                    slot.start < self.d.clock.now()
+                    or not cal.check_slot(slot, attendee_tz=attendee_tz, ignore=ignore).ok
                 ):
                     problems.append("alternative_invalid")
                     break

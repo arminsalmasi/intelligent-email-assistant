@@ -19,7 +19,8 @@ class ReviewRequest(BaseModel):
     actions: list[ProposedAction]
     instructions: str = (
         "Decide per action: approve, edit (with payload changes) or reject. "
-        "Soft findings may be overridden with a justification; hard findings cannot."
+        "Approving an action with soft findings acknowledges them (recorded in the audit); "
+        "actions with hard findings can only be edited or rejected."
     )
 
 
@@ -46,3 +47,5 @@ class HumanDecision(BaseModel):
 class ReviewResponse(BaseModel):
     decisions: list[HumanDecision]
     reviewer: str = "owner"
+    # Echo the round from the ReviewRequest to guard against stale/duplicate submits.
+    round: int | None = None

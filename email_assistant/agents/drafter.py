@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from email_assistant.deps import Deps
 from email_assistant.memory.episodic import adapt_template
-from email_assistant.safety.untrusted import UNTRUSTED_NOTICE, normalise, wrap
+from email_assistant.safety.untrusted import UNTRUSTED_NOTICE, normalise, sanitise, wrap
 from email_assistant.schemas.actions import Attachment, ProposedAction, SendEmailPayload
 from email_assistant.schemas.email import EmailThread
 from email_assistant.schemas.memory import MemoryKind, Sensitivity
@@ -124,7 +124,12 @@ class DrafterAgent:
         audience = d.audience(to)
         contact = d.profile.contact(msg.sender.email)
         attendee_tz = contact.timezone if contact else None
-        first = (msg.sender.name or msg.sender.email).split()[0].strip(",")
+        first = (
+            re.sub(r"[^\w\-'À-ÿ]", "", sanitise(msg.sender.name or msg.sender.email).split()[0])[
+                :40
+            ]
+            or "there"
+        )
         lang = triage.language if triage.language in FALLBACK else "en"
         sign_off = d.feedback.sign_off(audience, d.profile.preferences.sign_off)
         subject = (
@@ -145,6 +150,7 @@ class DrafterAgent:
             )
             if h.record.sensitivity in allowed
         ][:5]
+        d.memory.touch([h.record.id for h in facts])
         slot_labels = self._slot_labels(dec, attendee_tz)
         source, used, needs = "llm", [], []
 
@@ -166,18 +172,19 @@ class DrafterAgent:
         else:
             for ex in examples:
                 d.telemetry.record("memory_reuse", "example", score=ex.hit.score, tokens_saved=0)
-            lessons = d.feedback.lessons(query, triage.category.value)
+            # least privilege also for learned material: only lessons from the same audience
+            lessons = d.feedback.lessons(query, triage.category.value, audience=audience)
             o = d.profile.owner
             parts = [
                 "KNOWN FACTS:\n"
                 + (
                     "\n".join(f"- [{h.record.key}] {h.record.content}" for h in facts) or "- (none)"
                 ),
-                f"RECIPIENT: {msg.sender.display()} ({audience}"
+                f"RECIPIENT: {sanitise(msg.sender.display())} ({audience}"
                 f"{', ' + contact.role + ' at ' + contact.organization if contact else ''})",
             ]
             if summary:
-                parts.append(f"THREAD SUMMARY: {summary.summary}")
+                parts.append(f"THREAD SUMMARY: {sanitise(summary.summary)}")
             if dec:
                 parts.append(self._scheduling_brief(dec, slot_labels))
             if lessons:

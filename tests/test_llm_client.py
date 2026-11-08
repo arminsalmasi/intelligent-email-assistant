@@ -20,7 +20,7 @@ class FlakyModel:
         self.fail = fail
         self.calls = 0
 
-    def with_structured_output(self, schema, include_raw=True):
+    def with_structured_output(self, schema, include_raw=True, **kw):
         model = self
 
         class R:
@@ -64,4 +64,56 @@ def test_replay_needs_no_model(tmp_path):
 def test_exhausted_retries_return_none(tmp_path):
     c = _client(FlakyModel(fail=10), tmp_path, retries=1)
     assert c.structured(Out, "sys", "user", "t") is None
-    assert c.telemetry.summary()["fallbacks"] == {"t": 1}
+    assert c.telemetry.summary()["fallbacks"]["t"] >= 1
+    assert c.backends[0].down  # connection failures after retries trip the breaker
+
+
+class ErrModel(FlakyModel):
+    def __init__(self, exc):
+        super().__init__(fail=0)
+        self.exc = exc
+
+    def with_structured_output(self, schema, include_raw=True, **kw):
+        model = self
+
+        class R:
+            def invoke(self, messages):
+                model.calls += 1
+                raise model.exc
+
+        return R()
+
+
+def test_quota_error_falls_through_to_next_backend(tmp_path):
+    from email_assistant.llm.client import Backend
+
+    primary = ErrModel(RuntimeError("429 RESOURCE_EXHAUSTED quota exceeded"))
+    local = FlakyModel(fail=0)
+    c = LLMClient(
+        primary,
+        "gemini",
+        Telemetry(),
+        JsonlCache(tmp_path / "a.jsonl", "off"),
+        max_retries=3,
+        sleep=lambda s: None,
+        fallbacks=[
+            Backend(
+                "assistant:32k",
+                "local",
+                local,
+                JsonlCache(tmp_path / "b.jsonl", "off"),
+                "json_schema",
+            )
+        ],
+    )
+    assert c.structured(Out, "sys", "user", "t").answer == "ok"
+    assert primary.calls == 1  # quota errors are not retried
+    assert c.backends[0].down.startswith("fatal") and c.model_name == "assistant:32k"
+    assert c.structured(Out, "sys", "again", "t").answer == "ok" and primary.calls == 1
+
+
+def test_timeouts_are_not_retried(tmp_path):
+    m = ErrModel(TimeoutError("read timed out"))
+    c = _client(m, tmp_path, retries=3)
+    assert c.structured(Out, "sys", "user", "t") is None
+    assert m.calls == 1 and c.backends[0].down is None

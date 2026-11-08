@@ -99,10 +99,15 @@ def _review_interactive(svc: AssistantService) -> None:
         console.print(f"-> {item.status}")
 
 
-def cmd_demo(auto: bool) -> None:
-    svc = AssistantService.create(get_settings())
+def cmd_demo(auto: bool, llm: str | None = None) -> None:
+    settings = get_settings()
+    if llm:
+        settings = settings.model_copy(update={"llm_provider": llm})
+    svc = AssistantService.create(settings)
+    describe = getattr(svc.deps.llm, "describe", None)
+    chain = " -> ".join(f"{b['provider']}:{b['name']}" for b in describe()) if describe else "none"
     console.print(
-        f"[dim]LLM: {type(svc.deps.llm).__name__} | embedder: "
+        f"[dim]LLM backends: {chain} | embedder: "
         f"{svc.deps.memory.embedder.name} | tracing: {svc.tracing}[/dim]"
     )
     with console.status("Processing inbox..."):
@@ -132,10 +137,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="email-assistant")
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("demo")
-    d.add_argument("--auto", action="store_true")
+    d.add_argument("--auto", action="store_true", help="approve every proposed action")
+    d.add_argument(
+        "--llm",
+        choices=["auto", "gemini", "bedrock", "local", "none"],
+        help="LLM backend (default: LLM_PROVIDER, i.e. auto = gemini -> bedrock -> local)",
+    )
     args = ap.parse_args(argv)
     if args.cmd == "demo":
-        cmd_demo(args.auto)
+        cmd_demo(args.auto, args.llm)
     return 0
 
 

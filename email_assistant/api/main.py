@@ -57,9 +57,11 @@ def health() -> dict[str, Any]:
 @app.get("/ready")
 def ready() -> dict[str, Any]:
     s = service()
+    describe = getattr(s.deps.llm, "describe", None)
     return {
         "status": "ready",
         "llm": type(s.deps.llm).__name__,
+        "llm_backends": describe() if describe else [],
         "llm_provider": s.settings.llm_provider,
         "embedder": s.deps.memory.embedder.name,
         "tracing": s.tracing,

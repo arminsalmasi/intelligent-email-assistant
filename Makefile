@@ -10,6 +10,8 @@ help:
 	@echo "eval         golden eval: offline + replay with threshold gate"
 	@echo "eval-live    golden eval against Gemini (records the replay cache)"
 	@echo "demo         interactive CLI review session (demo-auto: approve all)"
+	@echo "             pick the LLM with LLM=auto|gemini|bedrock|local|none (also api, eval-live)"
+	@echo "engine-tunnel SSH tunnel to the local engine on the Mac Studio (port 11434)"
 	@echo "api          FastAPI on :8000 (docs at /docs)"
 	@echo "dashboard    Streamlit on :8501 (needs the API)"
 	@echo "mlflow       MLflow UI on :5000"
@@ -40,17 +42,24 @@ eval-offline:
 eval-replay:
 	$(PY) -m evals.run --mode replay --check
 
+# Choose the LLM backend: make demo LLM=local   (auto | gemini | bedrock | local | none)
+LLM ?=
+LLM_FLAG = $(if $(LLM),--llm $(LLM),)
+
 eval-live:
-	LLM_REQUESTS_PER_MINUTE=$${LLM_REQUESTS_PER_MINUTE:-60} $(PY) -m evals.run --mode live --mlflow
+	LLM_REQUESTS_PER_MINUTE=$${LLM_REQUESTS_PER_MINUTE:-60} $(PY) -m evals.run --mode live --mlflow $(if $(LLM),--provider $(LLM),)
 
 demo:
-	$(PY) -m email_assistant.cli demo
+	$(PY) -m email_assistant.cli demo $(LLM_FLAG)
 
 demo-auto:
-	$(PY) -m email_assistant.cli demo --auto
+	$(PY) -m email_assistant.cli demo --auto $(LLM_FLAG)
 
 api:
-	$(PY) -m uvicorn email_assistant.api.main:app --reload --port 8000
+	$(if $(LLM),LLM_PROVIDER=$(LLM),) $(PY) -m uvicorn email_assistant.api.main:app --reload --port 8000
+
+engine-tunnel:
+	ssh -N -L 11434:127.0.0.1:11434 studio
 
 dashboard:
 	$(PY) -m streamlit run dashboard/app.py

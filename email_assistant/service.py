@@ -16,7 +16,7 @@ from email_assistant.graph.orchestrator import InboxOrchestrator
 from email_assistant.graph.thread_graph import ThreadGraph
 from email_assistant.llm.cache import JsonlCache
 from email_assistant.llm.client import LLM, LLMClient, NullLLM
-from email_assistant.llm.factory import LLMUnavailable, get_chat_model, model_name
+from email_assistant.llm.factory import gemini_key, resolve_backends
 from email_assistant.memory.checkpointer import make_checkpointer
 from email_assistant.memory.embeddings import (
     CachedEmbedder,
@@ -39,7 +39,10 @@ from email_assistant.tools.reminders import MockReminders
 
 
 def build_embedder(settings: Settings, telemetry: Telemetry) -> Embedder:
-    if settings.embedding_provider == "gemini":
+    provider = settings.embedding_provider
+    if provider == "auto":
+        provider = "gemini" if gemini_key(settings) else "hashing"
+    if provider == "gemini":
         inner: Embedder = GeminiEmbedder(
             settings.gemini_embedding_model, settings.embedding_dim, settings.gemini_api_key
         )
@@ -52,19 +55,19 @@ def build_embedder(settings: Settings, telemetry: Telemetry) -> Embedder:
 
 
 def build_llm(settings: Settings, telemetry: Telemetry) -> LLM:
-    if settings.llm_provider == "none":
+    backends = resolve_backends(settings)
+    if not backends:
+        log_event(
+            "llm.unavailable",
+            provider=settings.llm_provider,
+            reason="no backend available - running rule-based fallbacks",
+        )
         return NullLLM(telemetry)
-    name = model_name(settings)
-    cache = JsonlCache(settings.llm_cache_dir / f"{name}.jsonl", settings.llm_cache_mode)
-    try:
-        model = get_chat_model(settings)
-    except LLMUnavailable as exc:
-        if settings.llm_cache_mode != "replay":
-            log_event("llm.unavailable", reason=str(exc))
-            return NullLLM(telemetry)
-        model = None  # replay-only: cached responses, misses fall back
-    return LLMClient(
-        model, name, telemetry, cache, settings.llm_max_retries, settings.llm_requests_per_minute
+    return LLMClient.from_backends(
+        backends,
+        telemetry,
+        max_retries=settings.llm_max_retries,
+        requests_per_minute=settings.llm_requests_per_minute,
     )
 
 

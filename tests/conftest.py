@@ -7,13 +7,13 @@ from email_assistant.service import AssistantService
 
 
 def offline_settings(**overrides) -> Settings:
-    return Settings(
-        llm_provider="none",
-        embedding_provider="hashing",
-        log_level="WARNING",
-        gemini_api_key=None,
-        **overrides,
-    )
+    base = {
+        "llm_provider": "none",
+        "embedding_provider": "hashing",
+        "log_level": "WARNING",
+        "gemini_api_key": None,
+    }
+    return Settings(**(base | overrides))
 
 
 @pytest.fixture

@@ -20,15 +20,35 @@ docker compose up --build   # api :8000/docs, dashboard :8501, MLflow :5000
 
 `docker compose` reads `.env` and sets `TRACING_BACKEND=mlflow` for the API, so traces appear in the bundled MLflow server.
 
-### LLM modes
+### Choosing the LLM backend
+
+`LLM_PROVIDER` (or `--llm` on the CLI, `LLM=` on `make demo|api|eval-live`):
+
+| Value | Backend |
+|---|---|
+| `auto` (default) | Every available backend, in order **Gemini -> Bedrock -> local engine**. A backend is skipped at startup if it is not configured (no key, no AWS credentials, engine unreachable or tag missing). At runtime, quota/auth/connection errors trip that backend's circuit breaker and the call falls through to the next one; timeouts are not retried. |
+| `gemini` | Google Gemini only (`GEMINI_API_KEY`, `GEMINI_MODEL`). |
+| `bedrock` | AWS Bedrock only - implemented, **untested** (no access). |
+| `local` | Self-hosted Ollama engine only: `assistant:32k` (Qwen3-30B-A3B-Instruct). Structured output uses the engine's native JSON-schema `format`; tool calling for the scheduler works the same as with Gemini. `ENGINE_BASE_URL` defaults to `http://127.0.0.1:11434`; from another machine run `make engine-tunnel` (SSH tunnel to the Studio). The client never sends `num_ctx`/`keep_alive`, so the engine's pinned models are not reloaded. |
+| `none` | Rule-based fallbacks only. |
+
+```bash
+make demo LLM=local              # use the Mac Studio engine
+make api LLM=auto                # Gemini, falling back to the local engine
+python -m email_assistant.cli demo --llm gemini
+```
+
+`/ready`, the CLI banner and the dashboard sidebar show the active chain and which backends are down. If nothing is available the service logs `llm.unavailable` and runs rule-based.
+
+Embeddings: `EMBEDDING_PROVIDER=auto` uses Gemini embeddings when a key is set, otherwise deterministic hashing (the local engine only serves chat models; loading an embedding model there would evict one of its two pinned models).
+
+### Record / replay
 
 | Mode | Settings | Behaviour |
 |---|---|---|
-| live | `GEMINI_API_KEY` set (default `LLM_PROVIDER=gemini`, `EMBEDDING_PROVIDER=gemini`) | Real Gemini calls. With `LLM_CACHE_MODE=record` responses are written to `evals/llm_cache`. |
-| replay | `LLM_CACHE_MODE=replay`, `EMBEDDING_CACHE_MODE=replay` | Recorded responses and vectors from `evals/llm_cache` and `evals/embed_cache`; no key or network. A missing embedding raises, a missing LLM response falls back to the rule-based path and is counted as a cache miss. |
+| live | default | Real calls to the selected backend(s). With `LLM_CACHE_MODE=record` responses are written to `evals/llm_cache/<model>.jsonl`. |
+| replay | `LLM_CACHE_MODE=replay`, `EMBEDDING_CACHE_MODE=replay` | Recorded responses and vectors only; no key or network, never calls a live model. A missing embedding raises, a missing LLM response falls back to the rule-based path and is counted as a cache miss. |
 | none | `LLM_PROVIDER=none`, `EMBEDDING_PROVIDER=hashing` | Rule-based fallbacks and lexical hashing embeddings. Used for the offline eval baseline and most tests. |
-
-If no key is present and the cache is not in replay mode, the service logs `llm.unavailable` and runs as `none`.
 
 The clock is fixed by default (`FIXED_NOW=2026-11-09T09:00:00+01:00`, Europe/Stockholm) so that relative dates in the fixture inbox ("Tuesday", "end of week") stay coherent. Set `FIXED_NOW=` (empty) to use the wall clock.
 
@@ -211,31 +231,32 @@ Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on 
 
 ### Results (36 threads, fixed clock)
 
-| Metric | LLM (Gemini, replayed) | Rule-based fallback only |
-|---|---|---|
-| Category accuracy | 0.944 | 0.944 |
-| Urgency accuracy | 0.806 | 0.833 |
-| Needs-reply accuracy | 0.972 | 1.0 |
-| Language detection | 1.0 | 1.0 |
-| Threat recall (10 attacks) | 1.0 | 1.0 |
-| False-positive quarantine rate (26 benign) | 0.0 | 0.0 |
-| Expected-action recall | 0.979 | 0.872 |
-| Forbidden actions proposed | 0 | 0 |
-| Confidential leaks sent | 0 | 0 |
-| Draft must-include rate | 1.0 | 1.0 |
-| Draft must-not violations | 0 | 0 |
-| Drafts with ungrounded claims | 0.0 | 0.0 |
-| Meeting kind (new/reschedule/cancel) | 1.0 | 0.6 |
-| Meetings resolved (slot/alternatives/cancel) | 1.0 | 0.6 |
-| Deadline -> reminder on the right day | 1.0 | 0.667 |
-| Ranking precision@8 | 0.5 | 0.625 |
-| Thread errors | 0 | 0 |
+| Metric | LLM (Gemini, replayed) | Local engine (`assistant:32k`, live) | Rule-based fallback only |
+|---|---|---|---|
+| Category accuracy | 0.944 | 0.889 | 0.944 |
+| Urgency accuracy | 0.806 | 0.611 | 0.833 |
+| Needs-reply accuracy | 0.972 | 0.917 | 1.0 |
+| Language detection | 1.0 | 0.889 | 1.0 |
+| Threat recall (10 attacks) | 1.0 | 1.0 | 1.0 |
+| False-positive quarantine rate (26 benign) | 0.0 | 0.038 | 0.0 |
+| Expected-action recall | 0.979 | 0.809 | 0.872 |
+| Forbidden actions proposed | 0 | 2 | 0 |
+| Confidential leaks sent | 0 | 0 | 0 |
+| Draft must-include rate | 1.0 | 1.0 | 1.0 |
+| Draft must-not violations | 0 | 1 | 0 |
+| Drafts with ungrounded claims | 0.0 | 0.105 | 0.0 |
+| Meeting kind (new/reschedule/cancel) | 1.0 | 1.0 | 0.6 |
+| Meetings resolved (slot/alternatives/cancel) | 1.0 | 1.0 | 0.6 |
+| Deadline -> reminder on the right day | 1.0 | 0.222 | 0.667 |
+| Ranking precision@8 | 0.5 | 0.625 | 0.625 |
+| Thread errors | 0 | 0 | 0 |
 
 Live run with `gemini-3.1-flash-lite`: 53.8k input / 9.1k output tokens for the whole inbox; LLM call latency p50 733 ms, p95 1.3 s; the scheduler's deterministic verifier rejected 2 model-proposed scheduling decisions (fell back to the rule planner). Reports: `evals/reports/<mode>.{md,json}` (generated, not committed).
 
 What the misses tell us (from `evals/reports/replay.md`):
 - Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but precision@8 of 0.625 shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
 - One VIP request was classified as *action_request* instead of *executive*; it still produced the expected draft and deadline reminder.
+- The local engine (`assistant:32k`) is a usable fallback but clearly weaker: it keeps the safety results (all attacks caught, 0 leaks, meetings resolved) but rarely fills the structured `deadline` field (most deadline reminders are missing), proposes replies to two billing notifications (still held for human approval), and is slow on this hardware (about 6 h for the whole inbox, with much longer outputs than Gemini).
 - The rule-based fallback is a safety net: it keeps the pipeline safe (same guard/policy results, 0 leaks) but misses most meetings and deadlines.
 
 

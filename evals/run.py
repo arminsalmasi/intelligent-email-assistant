@@ -37,12 +37,16 @@ ACTION_MAP = {
 }
 
 
-def settings_for(mode: str) -> Settings:
+def settings_for(mode: str, provider: str | None = None) -> Settings:
     base: dict[str, Any] = {"log_level": "WARNING"}
+    if provider:
+        base["llm_provider"] = provider
     if mode == "offline":
         base |= {"llm_provider": "none", "embedding_provider": "hashing"}
     elif mode == "replay":
         base |= {
+            "llm_provider": "gemini",  # the committed recordings come from Gemini
+            "embedding_provider": "gemini",
             "llm_cache_mode": "replay",
             "embedding_cache_mode": "replay",
             "gemini_api_key": None,
@@ -71,9 +75,9 @@ def auto_review(svc: AssistantService, max_rounds: int = 4) -> None:
             )
 
 
-def evaluate(mode: str) -> dict[str, Any]:
+def evaluate(mode: str, provider: str | None = None) -> dict[str, Any]:
     golden: dict[str, dict] = json.loads(GOLDEN.read_text(encoding="utf-8"))
-    svc = AssistantService.create(settings_for(mode), ephemeral=True)
+    svc = AssistantService.create(settings_for(mode, provider), ephemeral=True)
     started = time.perf_counter()
     items = svc.orchestrator.process_inbox()
     auto_review(svc)
@@ -288,11 +292,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--mode", choices=["offline", "replay", "live"], default="offline")
     ap.add_argument("--check", action="store_true", help="fail on threshold regressions")
     ap.add_argument("--mlflow", action="store_true", help="log the run to MLflow")
+    ap.add_argument(
+        "--provider",
+        choices=["auto", "gemini", "bedrock", "local"],
+        help="live mode: which LLM backend to evaluate (default: LLM_PROVIDER / auto)",
+    )
     args = ap.parse_args(argv)
-    report = evaluate(args.mode)
+    report = evaluate(args.mode, args.provider if args.mode == "live" else None)
     REPORTS.mkdir(parents=True, exist_ok=True)
-    (REPORTS / f"{args.mode}.json").write_text(json.dumps(report, indent=2, default=str))
-    (REPORTS / f"{args.mode}.md").write_text(to_markdown(report))
+    name = args.mode + (f"-{args.provider}" if args.mode == "live" and args.provider else "")
+    (REPORTS / f"{name}.json").write_text(json.dumps(report, indent=2, default=str))
+    (REPORTS / f"{name}.md").write_text(to_markdown(report))
     print(to_markdown(report))
     if args.mlflow:
         log_mlflow(report)

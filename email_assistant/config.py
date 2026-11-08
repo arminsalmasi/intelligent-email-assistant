@@ -19,15 +19,22 @@ class Settings(BaseSettings):
     )
 
     # --- LLM -----------------------------------------------------------------
-    # gemini  : Google Gemini via langchain-google-genai (tested path)
+    # auto    : chain of every available backend, in order gemini -> bedrock ->
+    #           local; quota/auth/connection failures fall through at runtime
+    # gemini  : Google Gemini via langchain-google-genai
     # bedrock : AWS Bedrock via langchain-aws (implemented, NOT tested - no access)
+    # local   : self-hosted Ollama engine (e.g. Qwen3 "assistant:32k" on a Mac Studio)
     # none    : deterministic heuristics only (offline / CI)
-    llm_provider: Literal["gemini", "bedrock", "none"] = "gemini"
+    llm_provider: Literal["auto", "gemini", "bedrock", "local", "none"] = "auto"
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.1-flash-lite"
     bedrock_model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0"
     aws_region: str = "eu-central-1"
     llm_temperature: float = 0.0
+    # Local engine (Ollama). Never set num_ctx: the context size lives in the tag.
+    engine_base_url: str = "http://127.0.0.1:11434"
+    assistant_tag: str = "assistant:32k"
+    local_timeout_s: float = 300.0  # first token on long prompts can take tens of seconds
     llm_timeout_s: float = 30.0
     llm_max_retries: int = 4
     # LLM response cache: off | replay (read only) | record (read + write)
@@ -36,9 +43,12 @@ class Settings(BaseSettings):
     llm_requests_per_minute: int = 0  # 0 = unlimited; throttle for free tiers
 
     # --- Embeddings (memory retrieval) ---------------------------------------
-    # gemini : semantic embeddings via API (default)
+    # auto   : gemini if a key is configured, otherwise hashing
+    # gemini : semantic embeddings via API
     # hashing: deterministic lexical embeddings, offline
-    embedding_provider: Literal["gemini", "hashing"] = "gemini"
+    # (The local engine only serves chat tags; loading an embedding model there
+    #  would evict one of the two pinned models, so it is not used for embeddings.)
+    embedding_provider: Literal["auto", "gemini", "hashing"] = "auto"
     gemini_embedding_model: str = "models/gemini-embedding-001"
     embedding_dim: int = 768
     # off | replay | record. In replay mode a cache miss raises - vector spaces

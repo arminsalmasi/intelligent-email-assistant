@@ -29,8 +29,11 @@ def api(method: str, path: str, **kw):
 with st.sidebar:
     st.title("Email Assistant")
     ready = api("GET", "/ready") or {}
+    chain = " → ".join(
+        f"{b['name']}{' (down)' if b.get('down') else ''}" for b in ready.get("llm_backends", [])
+    )
     st.caption(
-        f"LLM: {ready.get('llm')} · embedder: {ready.get('embedder')} · "
+        f"LLM: {chain or 'rule-based only'} · embedder: {ready.get('embedder')} · "
         f"tracing: {ready.get('tracing')}"
     )
     st.caption(f"Clock: {ready.get('now', '')[:16]}")

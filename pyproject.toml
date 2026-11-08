@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 bedrock = ["langchain-aws>=1.9"]
+local = ["langchain-ollama>=1.0"]
 dashboard = ["streamlit>=1.40", "pandas>=2.2"]
 tracing = ["mlflow>=3.0"]
 dev = ["pytest>=8.3", "ruff>=0.7", "nbformat>=5.10", "nbclient>=0.10", "ipykernel>=6.29"]

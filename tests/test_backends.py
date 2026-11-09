@@ -57,3 +57,12 @@ def test_replay_uses_a_single_recording(tmp_path):
     for name in (s.gemini_model, s.assistant_tag):
         factory.cache_file(s, name).write_text('{"key": "x", "value": {}}\n')
     assert [b.provider for b in factory.resolve_backends(s)] == ["gemini"]
+
+
+def test_bedrock_api_key_counts_as_credentials(monkeypatch):
+    import boto3
+
+    monkeypatch.setattr(boto3.Session, "get_credentials", lambda self: None)
+    assert factory.check_available(offline_settings(), "bedrock")  # neither -> unavailable
+    s = offline_settings(aws_bearer_token_bedrock="test-token")
+    assert factory.check_available(s, "bedrock") is None

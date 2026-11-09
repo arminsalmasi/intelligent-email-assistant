@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -22,14 +23,17 @@ class Settings(BaseSettings):
     # auto    : chain of every available backend, in order gemini -> bedrock ->
     #           local; quota/auth/connection failures fall through at runtime
     # gemini  : Google Gemini via langchain-google-genai
-    # bedrock : AWS Bedrock via langchain-aws (implemented, NOT tested - no access)
+    # bedrock : AWS Bedrock via langchain-aws (Claude Haiku 4.5, EU inference profile)
     # local   : self-hosted Ollama engine (e.g. Qwen3 "assistant:32k" on a Mac Studio)
     # none    : deterministic heuristics only (offline / CI)
     llm_provider: Literal["auto", "gemini", "bedrock", "local", "none"] = "auto"
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.1-flash-lite"
-    bedrock_model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    bedrock_model_id: str = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"  # EU inference profile
     aws_region: str = "eu-central-1"
+    # Bedrock API key (bearer token). Alternative to IAM credentials; boto3 reads it
+    # from the environment, so it is exported there when the model is built.
+    aws_bearer_token_bedrock: SecretStr | None = None
     llm_temperature: float = 0.0
     # Local engine (Ollama). Never set num_ctx: the context size lives in the tag.
     engine_base_url: str = "http://127.0.0.1:11434"

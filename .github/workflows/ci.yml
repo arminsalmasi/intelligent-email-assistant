@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: uv venv --allow-existing && uv pip install -e ".[dev]"
+        run: uv venv --allow-existing && uv pip install -e ".[dev,bedrock]"
       - name: Lint
         run: |
           .venv/bin/ruff check email_assistant evals tests dashboard

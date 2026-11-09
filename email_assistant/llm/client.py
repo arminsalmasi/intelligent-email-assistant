@@ -96,7 +96,6 @@ _FATAL = (
     "429",
     "rate limit",
     "ratelimit",
-    "throttling",
     "permission_denied",
     "unauthorized",
     "401",
@@ -121,6 +120,39 @@ _CONNECTION = (
     "connect error",
     "name or service not known",
 )
+
+
+_UNSUPPORTED_SCHEMA_KEYS = {
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+    "minLength",
+    "maxLength",
+    "maxItems",
+    "pattern",
+}
+
+
+def relaxed_schema(schema: type[BaseModel]) -> dict[str, Any]:
+    """JSON schema without the constraint keywords that some providers' native
+    structured-output modes reject (Bedrock: "minimum/maximum not supported").
+    The answer is still validated against the full Pydantic model afterwards."""
+
+    def clean(node: Any) -> Any:
+        if isinstance(node, dict):
+            out = {k: clean(v) for k, v in node.items() if k not in _UNSUPPORTED_SCHEMA_KEYS}
+            if out.get("type") == "object" and "properties" in out:
+                out["additionalProperties"] = False
+            if out.get("minItems", 0) > 1:
+                out.pop("minItems")
+            return out
+        if isinstance(node, list):
+            return [clean(v) for v in node]
+        return node
+
+    return clean(schema.model_json_schema())
 
 
 def classify_error(exc: BaseException) -> str:
@@ -348,7 +380,10 @@ class LLMClient:
             kwargs = {"include_raw": True}
             if b.structured_method:
                 kwargs["method"] = b.structured_method
-            runnable = b.model.with_structured_output(schema, **kwargs)
+            target: Any = schema
+            if b.provider == "bedrock" and b.structured_method == "json_schema":
+                target = relaxed_schema(schema)  # parsed as dict, validated below
+            runnable = b.model.with_structured_output(target, **kwargs)
 
             def _invoke(runnable: Any = runnable) -> tuple[T, dict]:
                 out = runnable.invoke(messages)

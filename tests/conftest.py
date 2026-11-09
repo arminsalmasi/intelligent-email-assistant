@@ -12,6 +12,7 @@ def offline_settings(**overrides) -> Settings:
         "embedding_provider": "hashing",
         "log_level": "WARNING",
         "gemini_api_key": None,
+        "aws_bearer_token_bedrock": None,  # tests never use real credentials
     }
     return Settings(**(base | overrides))
 

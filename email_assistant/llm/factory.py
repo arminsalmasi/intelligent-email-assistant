@@ -56,8 +56,8 @@ def check_available(settings: Settings, provider: str) -> str | None:
             return "langchain-aws not installed (pip install '.[bedrock]')"
         import boto3
 
-        if boto3.Session().get_credentials() is None:
-            return "no AWS credentials"
+        if settings.aws_bearer_token_bedrock is None and boto3.Session().get_credentials() is None:
+            return "no AWS credentials or Bedrock API key"
         return None
     if provider == "local":
         base = settings.engine_base_url.rstrip("/")
@@ -90,11 +90,14 @@ def get_chat_model(settings: Settings, provider: str | None = None) -> BaseChatM
             max_output_tokens=2048,
         )
     if provider == "bedrock":
-        # Implemented against the same interface but NOT tested (no Bedrock access).
         try:
             from langchain_aws import ChatBedrockConverse
         except ImportError as exc:  # optional extra
             raise LLMUnavailable("pip install '.[bedrock]' to use Bedrock") from exc
+        if settings.aws_bearer_token_bedrock is not None:
+            os.environ.setdefault(
+                "AWS_BEARER_TOKEN_BEDROCK", settings.aws_bearer_token_bedrock.get_secret_value()
+            )
         return ChatBedrockConverse(
             model=settings.bedrock_model_id,
             region_name=settings.aws_region,
@@ -128,7 +131,9 @@ def resolve_backends(settings: Settings) -> list[Backend]:
     for provider in wanted:
         name = model_name(settings, provider)
         cache = JsonlCache(cache_file(settings, name), settings.llm_cache_mode)
-        method = "json_schema" if provider == "local" else None
+        # native JSON-schema output: Claude via tool-calling sometimes returns lists as
+        # XML-ish strings on long threads; Ollama uses its `format` parameter.
+        method = "json_schema" if provider in ("local", "bedrock") else None
         if settings.llm_cache_mode == "replay":
             # Replay is read-only and deterministic: never call a live model, and use a
             # single recording (no silent fall-through to another model's answers).

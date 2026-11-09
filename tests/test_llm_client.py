@@ -173,3 +173,15 @@ def test_outage_is_not_counted_as_cache_miss(tmp_path):
     c = _two_backends(ErrModel(RuntimeError("401")), ErrModel(RuntimeError("403")), tmp_path)
     assert c.structured(Out, "sys", "user", "t") is None
     assert c.cache_misses == 0
+
+
+def test_relaxed_schema_drops_constraints_bedrock_rejects():
+    import json
+
+    from email_assistant.llm.client import relaxed_schema
+    from email_assistant.schemas.triage import TriageResult
+
+    text = json.dumps(relaxed_schema(TriageResult))
+    assert '"minimum"' not in text and '"maximum"' not in text
+    assert relaxed_schema(TriageResult)["additionalProperties"] is False
+    assert '"maximum"' in json.dumps(TriageResult.model_json_schema())  # model keeps it

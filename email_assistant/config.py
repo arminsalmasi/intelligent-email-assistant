@@ -58,6 +58,7 @@ class Settings(BaseSettings):
 
     # --- Data / persistence --------------------------------------------------
     fixtures_dir: Path = ROOT_DIR / "fixtures"
+    mail_eml_dir: Path | None = None  # load the inbox from .eml files instead of the fixture
     data_dir: Path = ROOT_DIR / "data"
     memory_db: str = "memory.db"
     checkpoint_db: str = "checkpoints.db"

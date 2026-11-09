@@ -114,7 +114,12 @@ class AssistantService:
                 store, s.episodic_reuse_threshold, s.episodic_example_threshold
             ),
             feedback=FeedbackMemory(store),
-            mail=mail or MockMailProvider.from_fixture(Path(s.fixtures_dir) / "mailbox.json"),
+            mail=mail
+            or (
+                MockMailProvider.from_eml_dir(Path(s.mail_eml_dir), profile.owner.email)
+                if s.mail_eml_dir
+                else MockMailProvider.from_fixture(Path(s.fixtures_dir) / "mailbox.json")
+            ),
             calendar=calendar,
             reminders=MockReminders(),
             detector=ThreatDetector(profile.org_domains, s.injection_quarantine_threshold),

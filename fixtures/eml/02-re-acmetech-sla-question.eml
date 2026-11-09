@@ -1,0 +1,16 @@
+From: Alex Morgan <alex.morgan@northwind.example>
+To: Daniel Reed <daniel.reed@acmetech.example>
+Subject: Re: SLA for the model-serving API
+Date: Thu, 05 Nov 2026 15:40:00 +0100
+Message-ID: <sla-2@northwind.example>
+In-Reply-To: <sla-1@acmetech.example>
+References: <sla-1@acmetech.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+Hi Daniel,
+
+Good question - let me check with the platform team and come back to you.
+
+Best,
+Alex

@@ -40,6 +40,10 @@ python -m email_assistant.cli demo --llm gemini
 
 `/ready`, the CLI banner and the dashboard sidebar show the active chain and which backends are down. If nothing is available the service logs `llm.unavailable` and runs rule-based.
 
+### Using your own `.eml` files
+
+The inbox can be loaded from a folder of exported `.eml` files instead of the JSON fixture: `python -m email_assistant.cli demo --eml fixtures/eml` (or `MAIL_EML_DIR=...` for the API). Threads follow `References`/`In-Reply-To` (subject as fallback), messages from the owner are outbound, HTML-only mail is reduced to text with HTML comments kept for the injection guard, attachments are ignored and malformed files are skipped. `fixtures/eml/` has six samples, including a reply chain and an invoice with a hidden instruction.
+
 Embeddings: `EMBEDDING_PROVIDER=auto` uses Gemini embeddings when a key is set, otherwise deterministic hashing (the local engine only serves chat models; loading an embedding model there would evict one of its two pinned models).
 
 ### Record / replay
@@ -303,7 +307,7 @@ Defined in `email_assistant/api/main.py`.
 - **State:** `PostgresSaver` for checkpoints and Postgres with pgvector for memory, replacing SQLite. This is required for more than one replica; the current manifest pins `replicas: 1` for that reason.
 - **Secrets:** AWS Secrets Manager via External Secrets and IRSA instead of `.env`.
 - **Telemetry:** OpenTelemetry export to Coralogix (see [docs/observability.md](docs/observability.md)).
-- **Mail providers:** adapters behind `MailProvider` for Gmail (`users.history` with push via Pub/Sub, Drafts as the natural approval surface, least-privilege OAuth scopes) or Microsoft Graph (delta queries, webhooks, `createReply`).
+- **Mail providers:** the `.eml` loader already maps real RFC 5322 mail onto the domain model; live adapters go behind the same `MailProvider` for Gmail (`users.history` with push via Pub/Sub, Drafts as the natural approval surface, least-privilege OAuth scopes) or Microsoft Graph (delta queries, webhooks, `createReply`).
 - **CI/CD:** the existing eval gate runs before image promotion; the live eval stays manual.
 - **Tenancy:** per-tenant isolation of memory, checkpoints and credentials.
 

@@ -1,0 +1,26 @@
+From: Ben Ito <ben.ito@northwind.example>
+To: Alex Morgan <alex.morgan@northwind.example>
+Subject: Retrieval service design doc - review please
+Date: Mon, 09 Nov 2026 08:30:00 +0100
+Message-ID: <design-1@northwind.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset="utf-8"
+
+Hi Alex,
+
+Attached is the design doc for the retrieval service. Could you review it by
+Friday 12:00? Section 4 (caching) is where I need your input most.
+
+Thanks,
+Ben
+
+--b1
+Content-Type: application/pdf; name="retrieval-design.pdf"
+Content-Disposition: attachment; filename="retrieval-design.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nPj4KZW5kb2JqCnRyYWlsZXIKPDwvUm9vdCAxIDAgUj4+CiUlRU9GCg==
+--b1--

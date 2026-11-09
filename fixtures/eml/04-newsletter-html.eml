@@ -1,0 +1,15 @@
+From: "AI Weekly" <news@aiweekly.example>
+To: alex.morgan@northwind.example
+Subject: =?utf-8?q?AI_Weekly_=E2=80=93_agents_in_production?=
+Date: Sat, 07 Nov 2026 07:00:00 +0000
+Message-ID: <issue-212@aiweekly.example>
+List-Unsubscribe: <https://aiweekly.example/unsubscribe>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+
+<html><body>
+<h1>AI Weekly #212</h1>
+<p>This week: evaluating agents in production &amp; why guardrails matter.</p>
+<ul><li>Five lessons from shipping LLM agents</li><li>Benchmarks you can trust</li></ul>
+<p><a href="https://aiweekly.example/unsubscribe">Unsubscribe</a></p>
+</body></html>

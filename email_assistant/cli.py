@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -99,10 +100,12 @@ def _review_interactive(svc: AssistantService) -> None:
         console.print(f"-> {item.status}")
 
 
-def cmd_demo(auto: bool, llm: str | None = None) -> None:
+def cmd_demo(auto: bool, llm: str | None = None, eml: str | None = None) -> None:
     settings = get_settings()
     if llm:
         settings = settings.model_copy(update={"llm_provider": llm})
+    if eml:
+        settings = settings.model_copy(update={"mail_eml_dir": Path(eml)})
     svc = AssistantService.create(settings)
     describe = getattr(svc.deps.llm, "describe", None)
     chain = " -> ".join(f"{b['provider']}:{b['name']}" for b in describe()) if describe else "none"
@@ -143,9 +146,10 @@ def main(argv: list[str] | None = None) -> int:
         choices=["auto", "gemini", "bedrock", "local", "none"],
         help="LLM backend (default: LLM_PROVIDER, i.e. auto = gemini -> bedrock -> local)",
     )
+    d.add_argument("--eml", metavar="DIR", help="read the inbox from a directory of .eml files")
     args = ap.parse_args(argv)
     if args.cmd == "demo":
-        cmd_demo(args.auto, args.llm)
+        cmd_demo(args.auto, args.llm, args.eml)
     return 0
 
 

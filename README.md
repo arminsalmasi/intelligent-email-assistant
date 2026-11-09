@@ -175,7 +175,7 @@ Once the plan is complete the flow is:
 
 | Layer | Implementation | Use |
 |---|---|---|
-| Short-term | LangGraph `SqliteSaver` checkpoints keyed by thread; the summarizer compresses long threads | Resume after interrupt, retry, audit |
+| Short-term | LangGraph `SqliteSaver` checkpoints keyed by thread, plus a durable inbox table (`memory/inbox_store.py`); the summarizer compresses long threads | Resume after interrupt, retry, audit; pending reviews survive a restart (`demo --fresh` or `/admin/reset` start over) |
 | Semantic (long-term) | Preferences, contacts and organisational facts in `memory/store.py`, each with a sensitivity label | Prompt context, policy (protected terms) |
 | Episodic | Approved replies stored with embeddings | Similarity >= 0.92 with the same category, same audience and no digits: reuse as a template without an LLM call. Similarity >= 0.55: few-shot example. 90-day TTL. |
 | Procedural | Human edits stored as exemplars; sign-off learned deterministically per audience | Style adaptation from feedback |
@@ -315,7 +315,7 @@ Defined in `email_assistant/api/main.py`.
 
 These are deliberate scope choices for a time-boxed prototype.
 
-- Mail and calendar are mocks; no real provider adapter exists yet.
+- Mail and calendar are mocks; no real provider adapter exists yet. Their state resets when the service restarts; review state does not.
 - SQLite storage limits the service to a single replica.
 - Injection detection is regex and heuristics plus LLM evidence, with policy and approval as the backstop.
 - The golden set has 36 threads, so metrics are indicative, not statistically strong.
@@ -332,15 +332,15 @@ email_assistant/
   api/           FastAPI app
   graph/         orchestrator.py (inbox), thread_graph.py (per-thread LangGraph)
   llm/           client (retry, cache, counters), factory (providers), cache, fake
-  memory/        store, embeddings, episodic, feedback, profile, checkpointer
+  memory/        store, embeddings, episodic, feedback, profile, checkpointer, inbox_store
   observability/ logging, metrics (telemetry), tracing
   safety/        injection detector, untrusted wrapping, policy engine
   schemas/       Pydantic models: email, triage, actions, scheduling, memory, review, state
   tools/         mail, calendar, reminders, ics
   cli.py, service.py (composition root), config.py, clock.py, deps.py
 dashboard/       Streamlit app
-evals/           run.py, thresholds.json, llm_cache/, embed_cache/
-fixtures/        mailbox, calendar, profile, golden
+evals/           run.py, judge.py, thresholds.json, llm_cache/, embed_cache/, judge_cache/
+fixtures/        mailbox, calendar, profile, golden, eml/ samples
 deploy/k8s/      api, dashboard, configmap, secret example
 docs/            architecture.md, observability.md, assignment.md, thread_graph.mmd
 notebooks/       demo walkthrough

@@ -83,6 +83,8 @@ class SendEmailPayload(_Payload):
     attachments: list[Attachment] = Field(default_factory=list)
     draft_source: str = "llm"  # llm | heuristic | memory_reuse
     used_facts: list[str] = Field(default_factory=list)  # memory keys the draft relied on
+    context_facts: list[str] = Field(default_factory=list)  # fact keys shown to the drafter
+    quoted_slots: list[str] = Field(default_factory=list)  # meeting slots the draft may quote
     ungrounded_claims: list[str] = Field(default_factory=list)
 
 
@@ -224,7 +226,16 @@ class ProposedAction(BaseModel):
         kind = payload.kind  # type: ignore[attr-defined]
         identity = payload.model_dump(
             mode="json",
-            exclude={"body", "used_facts", "ungrounded_claims", "attachments", "due", "notes"},
+            exclude={
+                "body",
+                "used_facts",
+                "context_facts",
+                "quoted_slots",
+                "ungrounded_claims",
+                "attachments",
+                "due",
+                "notes",
+            },
         )
         key = stable_key(thread_id, kind, identity)
         return cls(

@@ -26,6 +26,7 @@ from email_assistant.memory.embeddings import (
 )
 from email_assistant.memory.episodic import EpisodicMemory
 from email_assistant.memory.feedback import FeedbackMemory
+from email_assistant.memory.inbox_store import InboxStore
 from email_assistant.memory.profile import load_profile, seed_memory
 from email_assistant.memory.store import MemoryStore
 from email_assistant.observability.logging import log_event, setup_logging
@@ -133,6 +134,6 @@ class AssistantService:
             settings=s,
             deps=deps,
             graph=graph,
-            orchestrator=InboxOrchestrator(deps, graph),
+            orchestrator=InboxOrchestrator(deps, graph, InboxStore(db(s.inbox_db))),
             tracing=tracing,
         )

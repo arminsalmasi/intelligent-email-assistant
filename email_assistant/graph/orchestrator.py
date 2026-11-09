@@ -6,7 +6,6 @@ human decision resumes them (from CLI, API or dashboard).
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from typing import Any, Literal
 
@@ -15,6 +14,7 @@ from pydantic import BaseModel, ValidationError
 
 from email_assistant.agents.triage import TriageAgent, priority_score
 from email_assistant.deps import Deps
+from email_assistant.memory.inbox_store import InboxStore
 from email_assistant.observability.logging import log_context, log_event
 from email_assistant.schemas.actions import ActionStatus, ProposedAction, apply_edits
 from email_assistant.schemas.review import ReviewRequest, ReviewResponse
@@ -47,16 +47,38 @@ class ReviewRejected(ValueError):
 
 
 class InboxOrchestrator:
-    def __init__(self, deps: Deps, graph: Any):
+    def __init__(self, deps: Deps, graph: Any, store: InboxStore | None = None):
         self.d = deps
         self.graph = graph
         self.triage_agent = TriageAgent(deps)
-        self.run_id = uuid.uuid4().hex[:8]
+        self.store = store or InboxStore(":memory:")
+        self.run_id = self.store.epoch  # namespaces checkpoints; stable across restarts
         self.items: dict[str, InboxItem] = {}
+        self._restore()
 
     def _config(self, thread_id: str) -> dict:
         attempt = self.items[thread_id].attempt if thread_id in self.items else 0
         return {"configurable": {"thread_id": f"{thread_id}@{self.run_id}#{attempt}"}}
+
+    def _restore(self) -> None:
+        """Reload items after a restart. The checkpointer is the source of truth for
+        pending reviews: a review whose checkpoint is gone is re-processed, not shown."""
+        for raw in self.store.load():
+            item = InboxItem.model_validate_json(raw)
+            self.items[item.thread_id] = item
+            if item.status == "pending_review":
+                if self.graph.get_state(self._config(item.thread_id)).values:
+                    self._refresh(item.thread_id)
+                else:
+                    item.status, item.review = "error", None
+                    item.errors = [*item.errors, "checkpoint missing after restart"]
+                    self.store.save(item)
+        if self.items:
+            log_event(
+                "inbox.restored",
+                items=len(self.items),
+                pending_reviews=sum(i.status == "pending_review" for i in self.items.values()),
+            )
 
     def _needs_processing(self, thread_id: str, latest_id: str) -> bool:
         item = self.items.get(thread_id)
@@ -127,6 +149,7 @@ class InboxOrchestrator:
                 "error", "thread", error=type(exc).__name__, detail=str(exc)[:300]
             )
             item.status, item.errors = "error", [*item.errors, f"{type(exc).__name__}: {exc}"]
+            self.store.save(item)
             return
         self._refresh(thread_id)
 
@@ -152,6 +175,7 @@ class InboxOrchestrator:
                 item.status = "archived"
             else:
                 item.status = "done"
+        self.store.save(item)
 
     # --------------------------------------------------------------- review
     def pending_reviews(self) -> list[ReviewRequest]:

@@ -100,13 +100,23 @@ def _review_interactive(svc: AssistantService) -> None:
         console.print(f"-> {item.status}")
 
 
-def cmd_demo(auto: bool, llm: str | None = None, eml: str | None = None) -> None:
+def cmd_demo(
+    auto: bool, llm: str | None = None, eml: str | None = None, fresh: bool = False
+) -> None:
     settings = get_settings()
     if llm:
         settings = settings.model_copy(update={"llm_provider": llm})
     if eml:
         settings = settings.model_copy(update={"mail_eml_dir": Path(eml)})
     svc = AssistantService.create(settings)
+    if fresh:
+        svc.orchestrator.store.reset()
+        svc = AssistantService.create(settings)
+    elif svc.orchestrator.items:
+        console.print(
+            f"[dim]Resumed {len(svc.orchestrator.items)} threads from the last session "
+            f"({len(svc.orchestrator.pending_reviews())} pending reviews); --fresh starts over[/dim]"
+        )
     describe = getattr(svc.deps.llm, "describe", None)
     chain = " -> ".join(f"{b['provider']}:{b['name']}" for b in describe()) if describe else "none"
     console.print(
@@ -147,9 +157,10 @@ def main(argv: list[str] | None = None) -> int:
         help="LLM backend (default: LLM_PROVIDER, i.e. auto = gemini -> bedrock -> local)",
     )
     d.add_argument("--eml", metavar="DIR", help="read the inbox from a directory of .eml files")
+    d.add_argument("--fresh", action="store_true", help="forget the previous session's inbox")
     args = ap.parse_args(argv)
     if args.cmd == "demo":
-        cmd_demo(args.auto, args.llm, args.eml)
+        cmd_demo(args.auto, args.llm, args.eml, args.fresh)
     return 0
 
 

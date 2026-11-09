@@ -181,5 +181,6 @@ def reset() -> dict[str, str]:
     """Demo helper: fresh mailbox/calendar/run. Long-term memory is kept on purpose."""
     global _svc
     with _lock:
+        service().orchestrator.store.reset()  # new epoch: pending reviews are dropped
         _svc = _build()
     return {"status": "reset"}

@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     data_dir: Path = ROOT_DIR / "data"
     memory_db: str = "memory.db"
     checkpoint_db: str = "checkpoints.db"
+    inbox_db: str = "inbox.db"
     telemetry_db: str = "telemetry.db"
 
     # --- Clock ---------------------------------------------------------------

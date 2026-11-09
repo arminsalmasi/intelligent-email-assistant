@@ -291,6 +291,8 @@ class DrafterAgent:
             attachments=attachments,
             draft_source=source,
             used_facts=used,
+            context_facts=[h.record.key for h in facts],
+            quoted_slots=slot_labels,
             ungrounded_claims=ungrounded,
         )
         rationale = f"Reply to {triage.category.value} ({triage.urgency.value})"

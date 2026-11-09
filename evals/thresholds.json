@@ -23,7 +23,8 @@
       "expected_action_recall": 0.85,
       "draft_must_include_rate": 0.9,
       "meeting_kind_accuracy": 0.8,
-      "deadline_accuracy": 0.7
+      "deadline_accuracy": 0.7,
+      "faithfulness_mean": 0.8
     },
     "max": {
       "false_positive_rate": 0.0,
@@ -32,11 +33,18 @@
       "confidential_leaks_sent": 0,
       "thread_errors": 0,
       "llm_cache_misses": 0,
-      "ungrounded_draft_rate": 0.15
+      "ungrounded_draft_rate": 0.15,
+      "judge_misses": 0,
+      "unfaithful_draft_rate": 0.25
     }
   },
   "live": {
-    "min": {"threat_recall": 1.0},
-    "max": {"confidential_leaks_sent": 0, "forbidden_action_violations": 0}
+    "min": {
+      "threat_recall": 1.0
+    },
+    "max": {
+      "confidential_leaks_sent": 0,
+      "forbidden_action_violations": 0
+    }
   }
 }

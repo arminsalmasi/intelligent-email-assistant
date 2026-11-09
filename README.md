@@ -228,9 +228,15 @@ Regex and heuristic detection is a first layer, not a guarantee. The design assu
 - `draft_must_include_rate`, `draft_must_not_violations`, `ungrounded_draft_rate`
 - `confidential_leaks_sent`
 - `meeting_kind_accuracy`, `meeting_resolution_rate`, `deadline_accuracy`
+- `faithfulness_mean`, `unfaithful_draft_rate` (with `--judge`, see below)
 - operational: `thread_errors`, `llm_fallbacks`, `llm_cache_misses`, token counts, wall-clock time
 
 Modes: `offline` (no LLM, hashing embeddings; rule-based baseline), `replay` (recorded Gemini responses), `live` (real Gemini, refreshes the recordings, optional `--mlflow` logging). Each run auto-approves pending reviews with a simulated reviewer so the executor is exercised.
+**LLM-graded faithfulness** (`evals/judge.py`). The drafter's own grounding check only compares numbers and times. The judge splits each draft into atomic claims (facts, names, dates, plans, promises) and labels each one supported, unsupported or contradicted against exactly what the drafter was shown: the thread, the memory facts it retrieved (`context_facts` on the payload) and the meeting slots it could quote. Score = supported claims / claims. Design choices:
+- A different model family grades the drafts: the self-hosted `assistant:32k` (Qwen3) judges Gemini's output, so the judge does not share the drafter's blind spots and has no quota limit.
+- Email text is wrapped as untrusted data in the judge prompt too.
+- Verdicts are recorded in `evals/judge_cache/`, so CI reports and gates faithfulness without a model (`--judge local`); `make eval-judge` re-records them (needs the local engine).
+
 Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on a violation. CI runs lint, tests, the offline eval and the replay eval on every push and pull request. A separate manual workflow runs the live eval.
 
 ### Results (36 threads, fixed clock)
@@ -254,10 +260,13 @@ Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on 
 | Deadline -> reminder on the right day | 1.0 | 0.222 | 0.667 |
 | Ranking precision@8 | 0.5 | 0.625 | 0.625 |
 | Thread errors | 0 | 0 | 0 |
+| Faithfulness (LLM judge, mean) | 0.833 | - | - |
+| Drafts with an unsupported claim (LLM judge) | 0.2 | - | - |
 
 Live run with `gemini-3.1-flash-lite`: 53.8k input / 9.1k output tokens for the whole inbox; LLM call latency p50 733 ms, p95 1.3 s; the scheduler's deterministic verifier rejected 2 model-proposed scheduling decisions (fell back to the rule planner). Reports: `evals/reports/<mode>.{md,json}` (generated, not committed).
 
 What the misses tell us (from `evals/reports/replay.md`):
+- The judge finds what the number check cannot: 3 of 15 drafts promise things the owner never said (e.g. "I'll send the updated contract before Monday 16 November", "we remain fully committed to our roadmap"). The ungrounded-number check passes all of them. Those drafts still go to human review; surfacing judge verdicts in the review UI is the natural next step.
 - Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but precision@8 of 0.625 shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
 - One VIP request was classified as *action_request* instead of *executive*; it still produced the expected draft and deadline reminder.
 - The local engine (`assistant:32k`) is a usable fallback but clearly weaker: it keeps the safety results (all attacks caught, 0 leaks, meetings resolved) but rarely fills the structured `deadline` field (most deadline reminders are missing), proposes replies to two billing notifications (still held for human approval), and is slow on this hardware (about 6 h for the whole inbox, with much longer outputs than Gemini).
@@ -319,7 +328,7 @@ These are deliberate scope choices for a time-boxed prototype.
 - SQLite storage limits the service to a single replica.
 - Injection detection is regex and heuristics plus LLM evidence, with policy and approval as the backstop.
 - The golden set has 36 threads, so metrics are indicative, not statistically strong.
-- No LLM-as-judge faithfulness evaluation; grounding is a numeric/date check only.
+- The faithfulness judge is itself an LLM: it is a second opinion for reviewers and a regression signal, not ground truth. Its verdicts were spot-checked, not human-labelled.
 - The default model is `gemini-3.1-flash-lite`, chosen for free-tier quota. The model is a configuration switch (`GEMINI_MODEL`).
 - The Bedrock path is untested.
 - Rule-based fallbacks are a safety net and a CI baseline, not the intended main path.

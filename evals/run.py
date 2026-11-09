@@ -21,6 +21,7 @@ from email_assistant.config import ROOT_DIR, Settings
 from email_assistant.schemas.actions import ActionStatus, ActionType, SendEmailPayload
 from email_assistant.schemas.review import HumanDecision, ReviewResponse
 from email_assistant.service import AssistantService
+from evals.judge import FaithfulnessJudge, build_judge_llm
 
 GOLDEN = ROOT_DIR / "fixtures" / "golden.json"
 THRESHOLDS = ROOT_DIR / "evals" / "thresholds.json"
@@ -75,9 +76,19 @@ def auto_review(svc: AssistantService, max_rounds: int = 4) -> None:
             )
 
 
-def evaluate(mode: str, provider: str | None = None) -> dict[str, Any]:
+def evaluate(
+    mode: str, provider: str | None = None, judge: str | None = None, judge_live: bool = False
+) -> dict[str, Any]:
     golden: dict[str, dict] = json.loads(GOLDEN.read_text(encoding="utf-8"))
     svc = AssistantService.create(settings_for(mode, provider), ephemeral=True)
+    judge_llm = judge_tel = grader = None
+    if judge:
+        judge_llm, judge_tel = build_judge_llm(judge, replay=mode == "replay" and not judge_live)
+        o = svc.deps.profile.owner
+        grader = FaithfulnessJudge(
+            judge_llm, svc.deps.memory, o.name, o.title, svc.deps.clock.now().isoformat()
+        )
+    scores: list[float] = []
     started = time.perf_counter()
     items = svc.orchestrator.process_inbox()
     auto_review(svc)
@@ -143,6 +154,15 @@ def evaluate(mode: str, provider: str | None = None) -> dict[str, Any]:
             c["drafts"] += 1
             c["drafts_llm"] += p.draft_source == "llm"
             c["ungrounded_drafts"] += bool(p.ungrounded_claims)
+            if grader:
+                verdict = grader.judge(svc.deps.mail.get_thread(tid), p)
+                if verdict is None:
+                    c["judge_misses"] += 1
+                else:
+                    scores.append(verdict.score)
+                    c["drafts_unfaithful"] += bool(verdict.problems)
+                    for cl in verdict.problems[:3]:
+                        problems.append(f"judge: {cl.verdict} '{cl.claim[:80]}'")
             if p.ungrounded_claims:
                 problems.append(f"ungrounded {p.ungrounded_claims}")
             for s in g.get("draft_must_include", []):
@@ -227,6 +247,15 @@ def evaluate(mode: str, provider: str | None = None) -> dict[str, Any]:
         "deadline_accuracy": r("deadline_ok", "deadlines"),
         "ranking_precision_at_8": round(len(top_pred & top_gold) / 8, 3),
         "thread_errors": c["thread_errors"],
+        **(
+            {
+                "faithfulness_mean": round(sum(scores) / len(scores), 3) if scores else 0.0,
+                "unfaithful_draft_rate": r("drafts_unfaithful", "drafts"),
+                "judge_misses": c["judge_misses"],
+            }
+            if grader
+            else {}
+        ),
         "llm_drafts_share": round(c["drafts_llm"] / c["drafts"], 3) if c["drafts"] else 0.0,
         "llm_fallbacks": sum(tel["fallbacks"].values()),
         "llm_cache_misses": getattr(svc.deps.llm, "cache_misses", 0),
@@ -236,6 +265,10 @@ def evaluate(mode: str, provider: str | None = None) -> dict[str, Any]:
     }
     return {
         "mode": mode,
+        "judge": [f"{b['provider']}:{b['name']}" for b in judge_llm.describe()]
+        if judge_llm is not None and hasattr(judge_llm, "describe")
+        else None,
+        "judge_telemetry": judge_tel.summary() if judge_tel else None,
         "threads": c["n"],
         "metrics": metrics,
         "failures": failures,
@@ -248,9 +281,13 @@ def check(report: dict[str, Any]) -> list[str]:
     th = json.loads(THRESHOLDS.read_text())[report["mode"]]
     bad = []
     for k, v in th.get("min", {}).items():
+        if k not in report["metrics"]:
+            continue  # e.g. judge metrics when the eval ran without --judge
         if report["metrics"][k] < v:
             bad.append(f"{k}={report['metrics'][k]} < {v}")
     for k, v in th.get("max", {}).items():
+        if k not in report["metrics"]:
+            continue
         if report["metrics"][k] > v:
             bad.append(f"{k}={report['metrics'][k]} > {v}")
     return bad
@@ -260,6 +297,7 @@ def to_markdown(report: dict[str, Any]) -> str:
     lines = [
         f"# Evaluation report ({report['mode']}, {report['threads']} threads)",
         "",
+        *([f"Faithfulness judge: {', '.join(report['judge'])}", ""] if report.get("judge") else []),
         "| metric | value |",
         "|---|---|",
     ]
@@ -297,8 +335,20 @@ def main(argv: list[str] | None = None) -> int:
         choices=["auto", "gemini", "bedrock", "local"],
         help="live mode: which LLM backend to evaluate (default: LLM_PROVIDER / auto)",
     )
+    ap.add_argument(
+        "--judge",
+        choices=["local", "gemini", "bedrock"],
+        help="grade draft faithfulness with this model (replay mode reads evals/judge_cache)",
+    )
+    ap.add_argument(
+        "--judge-live",
+        action="store_true",
+        help="call the judge model even in replay mode and record its verdicts",
+    )
     args = ap.parse_args(argv)
-    report = evaluate(args.mode, args.provider if args.mode == "live" else None)
+    report = evaluate(
+        args.mode, args.provider if args.mode == "live" else None, args.judge, args.judge_live
+    )
     REPORTS.mkdir(parents=True, exist_ok=True)
     name = args.mode + (f"-{args.provider}" if args.mode == "live" and args.provider else "")
     (REPORTS / f"{name}.json").write_text(json.dumps(report, indent=2, default=str))

@@ -23,8 +23,8 @@ jobs:
         run: .venv/bin/python -m pytest -q
       - name: Golden eval - rule-based baseline
         run: .venv/bin/python -m evals.run --mode offline --check
-      - name: Golden eval - recorded Gemini responses (replay)
-        run: .venv/bin/python -m evals.run --mode replay --check
+      - name: Golden eval - recorded Gemini responses + recorded faithfulness judge (replay)
+        run: .venv/bin/python -m evals.run --mode replay --judge local --check
       - uses: actions/upload-artifact@v4
         if: always()
         with:

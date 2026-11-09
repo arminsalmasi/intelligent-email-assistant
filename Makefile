@@ -1,7 +1,7 @@
 PY ?= .venv/bin/python
 UV ?= uv
 
-.PHONY: help setup test lint format eval eval-offline eval-replay eval-live demo demo-auto api engine-tunnel dashboard mlflow docker-up docker-down k8s-validate clean
+.PHONY: help setup test lint format eval eval-offline eval-replay eval-live eval-judge demo demo-auto api engine-tunnel dashboard mlflow docker-up docker-down k8s-validate clean
 
 help:
 	@echo "setup        create .venv and install all extras"
@@ -9,6 +9,7 @@ help:
 	@echo "lint         ruff check + format check"
 	@echo "eval         golden eval: offline + replay with threshold gate"
 	@echo "eval-live    golden eval against Gemini (records the replay cache)"
+	@echo "eval-judge   re-record faithfulness verdicts with the local engine (needs the tunnel)"
 	@echo "demo         interactive CLI review session (demo-auto: approve all)"
 	@echo "             pick the LLM with LLM=auto|gemini|bedrock|local|none (also api, eval-live)"
 	@echo "engine-tunnel SSH tunnel to the local engine on the Mac Studio (port 11434)"
@@ -39,8 +40,11 @@ eval: eval-offline eval-replay
 eval-offline:
 	$(PY) -m evals.run --mode offline --check
 
+eval-judge:
+	$(PY) -m evals.run --mode replay --judge local --judge-live
+
 eval-replay:
-	$(PY) -m evals.run --mode replay --check
+	$(PY) -m evals.run --mode replay --judge local --check
 
 # Choose the LLM backend: make demo LLM=local   (auto | gemini | bedrock | local | none)
 # Only honoured on the command line, so an exported shell variable named LLM is ignored.

@@ -64,7 +64,7 @@ def test_replay_needs_no_model(tmp_path):
 def test_exhausted_retries_return_none(tmp_path):
     c = _client(FlakyModel(fail=10), tmp_path, retries=1)
     assert c.structured(Out, "sys", "user", "t") is None
-    assert c.telemetry.summary()["fallbacks"]["t"] >= 1
+    assert c.telemetry.summary()["fallbacks"]["t"] == 2  # breaker trip + no answer
     assert c.backends[0].down  # connection failures after retries trip the breaker
 
 
@@ -117,3 +117,59 @@ def test_timeouts_are_not_retried(tmp_path):
     c = _client(m, tmp_path, retries=3)
     assert c.structured(Out, "sys", "user", "t") is None
     assert m.calls == 1 and c.backends[0].down is None
+
+
+def _two_backends(primary, local, tmp_path, retries=1):
+    from email_assistant.llm.client import Backend
+
+    return LLMClient(
+        primary,
+        "gemini",
+        Telemetry(),
+        JsonlCache(tmp_path / "a.jsonl", "off"),
+        max_retries=retries,
+        sleep=lambda s: None,
+        fallbacks=[Backend("local", "local", local, JsonlCache(tmp_path / "b.jsonl", "off"))],
+    )
+
+
+def test_error_text_from_model_output_never_trips_breaker():
+    from email_assistant.llm.client import classify_error
+
+    # parse failures embed model/email text such as invoice numbers or "deadline"
+    assert classify_error(ValueError("parse failure: INV-4031 quota by deadline")) == "transient"
+    assert classify_error(RuntimeError("Deadline Friday, see invoice")) == "transient"
+
+    class Status(Exception):
+        status_code = 429
+
+    assert classify_error(Status("too many")) == "fatal"
+
+
+def test_breaker_reopens_after_cooldown(tmp_path):
+    primary = ErrModel(RuntimeError("429 quota exceeded"))
+    c = _two_backends(primary, FlakyModel(fail=0), tmp_path)
+    c.structured(Out, "sys", "user", "t")
+    assert c.backends[0].down
+    c.backends[0].down_until = 0.0  # cooldown elapsed -> half-open probe
+    primary.exc = None
+    primary.with_structured_output = FlakyModel(fail=0).with_structured_output
+    assert c.backends[0].down is None
+    c.structured(Out, "sys", "probe", "t")
+    assert c.backends[0].down_reason is None and c.model_name == "gemini"
+
+
+def test_repeated_timeouts_trip_the_breaker(tmp_path):
+    primary = ErrModel(TimeoutError("read timed out"))
+    c = _two_backends(primary, FlakyModel(fail=0), tmp_path)
+    c.structured(Out, "sys", "a", "t")
+    c.structured(Out, "sys", "b", "t")
+    assert c.backends[0].down.startswith("timeout")
+    c.structured(Out, "sys", "c", "t")
+    assert primary.calls == 2  # third call skips the slow backend
+
+
+def test_outage_is_not_counted_as_cache_miss(tmp_path):
+    c = _two_backends(ErrModel(RuntimeError("401")), ErrModel(RuntimeError("403")), tmp_path)
+    assert c.structured(Out, "sys", "user", "t") is None
+    assert c.cache_misses == 0

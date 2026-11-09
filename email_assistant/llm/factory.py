@@ -130,9 +130,12 @@ def resolve_backends(settings: Settings) -> list[Backend]:
         cache = JsonlCache(cache_file(settings, name), settings.llm_cache_mode)
         method = "json_schema" if provider == "local" else None
         if settings.llm_cache_mode == "replay":
-            # Replay is read-only and deterministic: never call a live model.
-            if len(cache):
+            # Replay is read-only and deterministic: never call a live model, and use a
+            # single recording (no silent fall-through to another model's answers).
+            if len(cache) or provider == wanted[-1]:
+                # an empty last candidate is kept so misses are counted, not hidden
                 backends.append(Backend(name, provider, None, cache, method))
+                break
             continue
         reason = check_available(settings, provider)
         if reason:

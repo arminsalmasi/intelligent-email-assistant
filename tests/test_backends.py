@@ -44,3 +44,16 @@ def test_nothing_available_means_rule_based(monkeypatch):
 def test_cache_file_names_are_filesystem_safe():
     s = offline_settings()
     assert factory.cache_file(s, "assistant:32k").name == "assistant_32k.jsonl"
+
+
+def test_replay_without_recording_counts_misses(tmp_path):
+    s = offline_settings(llm_provider="auto", llm_cache_mode="replay", llm_cache_dir=str(tmp_path))
+    backends = factory.resolve_backends(s)
+    assert len(backends) == 1 and backends[0].model is None and len(backends[0].cache) == 0
+
+
+def test_replay_uses_a_single_recording(tmp_path):
+    s = offline_settings(llm_provider="auto", llm_cache_mode="replay", llm_cache_dir=str(tmp_path))
+    for name in (s.gemini_model, s.assistant_tag):
+        factory.cache_file(s, name).write_text('{"key": "x", "value": {}}\n')
+    assert [b.provider for b in factory.resolve_backends(s)] == ["gemini"]

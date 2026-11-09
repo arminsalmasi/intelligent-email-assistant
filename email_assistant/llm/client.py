@@ -70,7 +70,24 @@ class Backend:
     model: BaseChatModel | None  # None = replay-only (answers from cache)
     cache: JsonlCache
     structured_method: str | None = None  # e.g. "json_schema" for the local engine
-    down: str | None = field(default=None)  # reason once the circuit breaker trips
+    down_reason: str | None = field(default=None)
+    down_until: float = 0.0  # time.monotonic() until which the breaker stays open
+    timeouts: int = 0  # consecutive timeouts
+
+    @property
+    def down(self) -> str | None:
+        """Reason while the circuit breaker is open; None once the cooldown has passed
+        (the next call is a half-open probe: success closes it, failure re-opens it)."""
+        if self.down_reason and time.monotonic() < self.down_until:
+            return self.down_reason
+        return None
+
+    def trip(self, reason: str, cooldown_s: float) -> None:
+        self.down_reason = reason
+        self.down_until = time.monotonic() + cooldown_s
+
+    def reset(self) -> None:
+        self.down_reason, self.down_until, self.timeouts = None, 0.0, 0
 
 
 _FATAL = (
@@ -79,6 +96,7 @@ _FATAL = (
     "429",
     "rate limit",
     "ratelimit",
+    "throttling",
     "permission_denied",
     "unauthorized",
     "401",
@@ -86,10 +104,15 @@ _FATAL = (
     "api key",
     "api_key",
     "credentials",
+    "accessdenied",
+    "expiredtoken",
+    "unrecognizedclient",
     "not_found",
+    "notfound",
     "404",
 )
-_TIMEOUT = ("timeout", "timed out", "deadline")
+_FATAL_STATUS = {401, 403, 404, 429}
+_TIMEOUT = ("timeout", "timed out", "deadline_exceeded", "deadlineexceeded")
 _CONNECTION = (
     "connecterror",
     "connection refused",
@@ -104,6 +127,13 @@ def classify_error(exc: BaseException) -> str:
     """fatal: backend unusable for this run (quota/auth/model missing) -> trip breaker.
     timeout: slow generation, do NOT retry (it only queues more work) -> next backend.
     connection: retry with backoff, then trip.  transient: retry (5xx, parse errors)."""
+    # Parse/validation errors embed model output (and so email text): never keyword-match
+    # them, or an invoice number like "INV-4031" would trip the breaker.
+    if isinstance(exc, ValueError):
+        return "transient"
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    if isinstance(status, int) and status in _FATAL_STATUS:
+        return "fatal"
     text = f"{type(exc).__name__} {exc}".lower()
     if any(k in text for k in _FATAL):
         return "fatal"
@@ -118,9 +148,13 @@ class LLMClient:
     """Gateway over an ordered chain of backends with per-backend caches.
 
     Every call tries backends in order; a cache hit answers immediately. Quota,
-    auth and connection failures trip a backend's circuit breaker for the rest of
-    the run, so e.g. an exhausted Gemini free tier falls through to the local engine.
+    auth, connection failures and repeated timeouts open a backend's circuit breaker
+    for `breaker_cooldown_s`, so e.g. an exhausted Gemini free tier falls through to
+    the local engine; after the cooldown the backend is probed again.
     """
+
+    breaker_cooldown_s = 120.0
+    timeouts_to_trip = 2
 
     def __init__(
         self,
@@ -248,7 +282,9 @@ class LLMClient:
             self._throttle(backend)
             started = time.perf_counter()
             try:
-                return fn(), (time.perf_counter() - started) * 1000
+                out = fn()
+                backend.reset()
+                return out, (time.perf_counter() - started) * 1000
             except Exception as exc:
                 kind = classify_error(exc)
                 self.telemetry.record(
@@ -261,8 +297,14 @@ class LLMClient:
                     error=type(exc).__name__,
                     error_kind=kind,
                 )
-                if kind == "fatal" or (kind == "connection" and attempt == self.max_retries):
-                    backend.down = f"{kind}: {type(exc).__name__}"
+                if kind == "timeout":
+                    backend.timeouts += 1
+                if (
+                    kind == "fatal"
+                    or (kind == "connection" and attempt == self.max_retries)
+                    or (kind == "timeout" and backend.timeouts >= self.timeouts_to_trip)
+                ):
+                    backend.trip(f"{kind}: {type(exc).__name__}", self.breaker_cooldown_s)
                     self.telemetry.record(
                         "llm_fallback",
                         purpose,
@@ -358,7 +400,8 @@ class LLMClient:
         return None
 
     def _no_answer(self, purpose: str) -> None:
-        if all(b.model is None for b in self.backends if not b.down):
+        # A miss means "replay-only and nothing recorded", not "live backends are down".
+        if all(b.model is None for b in self.backends):
             self.cache_misses += 1
         self.telemetry.record("llm_fallback", purpose, reason="no_backend_answered")
 

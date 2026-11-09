@@ -26,7 +26,7 @@ docker compose up --build   # api :8000/docs, dashboard :8501, MLflow :5000
 
 | Value | Backend |
 |---|---|
-| `auto` (default) | Every available backend, in order **Gemini -> Bedrock -> local engine**. A backend is skipped at startup if it is not configured (no key, no AWS credentials, engine unreachable or tag missing). At runtime, quota/auth/connection errors trip that backend's circuit breaker and the call falls through to the next one; timeouts are not retried. |
+| `auto` (default) | Every available backend, in order **Gemini -> Bedrock -> local engine**. A backend is skipped at startup if it is not configured (no key, no AWS credentials, engine unreachable or tag missing). At runtime, quota/auth/connection errors trip that backend's circuit breaker and the call falls through to the next one. Timeouts are not retried, but two in a row also trip the breaker. A tripped backend is probed again after a 2-minute cooldown. |
 | `gemini` | Google Gemini only (`GEMINI_API_KEY`, `GEMINI_MODEL`). |
 | `bedrock` | AWS Bedrock only - implemented, **untested** (no access). |
 | `local` | Self-hosted Ollama engine only: `assistant:32k` (Qwen3-30B-A3B-Instruct). Structured output uses the engine's native JSON-schema `format`; tool calling for the scheduler works the same as with Gemini. `ENGINE_BASE_URL` defaults to `http://127.0.0.1:11434`; from another machine run `make engine-tunnel` (SSH tunnel to the Studio). The client never sends `num_ctx`/`keep_alive`, so the engine's pinned models are not reloaded. |

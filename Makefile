@@ -1,7 +1,7 @@
 PY ?= .venv/bin/python
 UV ?= uv
 
-.PHONY: help setup test lint format eval eval-offline eval-replay eval-live demo demo-auto api dashboard mlflow docker-up docker-down k8s-validate clean
+.PHONY: help setup test lint format eval eval-offline eval-replay eval-live demo demo-auto api engine-tunnel dashboard mlflow docker-up docker-down k8s-validate clean
 
 help:
 	@echo "setup        create .venv and install all extras"
@@ -43,11 +43,12 @@ eval-replay:
 	$(PY) -m evals.run --mode replay --check
 
 # Choose the LLM backend: make demo LLM=local   (auto | gemini | bedrock | local | none)
-LLM ?=
-LLM_FLAG = $(if $(LLM),--llm $(LLM),)
+# Only honoured on the command line, so an exported shell variable named LLM is ignored.
+LLM_CLI = $(if $(filter command line,$(origin LLM)),$(LLM),)
+LLM_FLAG = $(if $(LLM_CLI),--llm $(LLM_CLI),)
 
 eval-live:
-	LLM_REQUESTS_PER_MINUTE=$${LLM_REQUESTS_PER_MINUTE:-60} $(PY) -m evals.run --mode live --mlflow $(if $(LLM),--provider $(LLM),)
+	LLM_REQUESTS_PER_MINUTE=$${LLM_REQUESTS_PER_MINUTE:-60} $(PY) -m evals.run --mode live --mlflow $(if $(LLM_CLI),--provider $(LLM_CLI),)
 
 demo:
 	$(PY) -m email_assistant.cli demo $(LLM_FLAG)
@@ -56,7 +57,7 @@ demo-auto:
 	$(PY) -m email_assistant.cli demo --auto $(LLM_FLAG)
 
 api:
-	$(if $(LLM),LLM_PROVIDER=$(LLM),) $(PY) -m uvicorn email_assistant.api.main:app --reload --port 8000
+	$(if $(LLM_CLI),LLM_PROVIDER=$(LLM_CLI),) $(PY) -m uvicorn email_assistant.api.main:app --reload --port 8000
 
 engine-tunnel:
 	ssh -N -L 11434:127.0.0.1:11434 studio

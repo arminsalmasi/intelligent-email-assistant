@@ -12,7 +12,7 @@ from typing import Any, Literal
 from langgraph.types import Command
 from pydantic import BaseModel, ValidationError
 
-from email_assistant.agents.triage import TriageAgent, priority_score
+from email_assistant.agents.triage import TriageAgent, is_quarantined, priority_score
 from email_assistant.deps import Deps
 from email_assistant.memory.inbox_store import InboxStore
 from email_assistant.observability.logging import log_context, log_event
@@ -108,7 +108,8 @@ class InboxOrchestrator:
                     )
                     tri, guard = self.triage_agent.run(t, guard)
                 triaged.append((priority_score(t, tri, d, now), t, tri, guard))
-            triaged.sort(key=lambda x: x[0], reverse=True)
+            # quarantined threads belong to the security queue: below all other mail
+            triaged.sort(key=lambda x: (not is_quarantined(x[3], x[2]), x[0]), reverse=True)
             if limit:
                 triaged = triaged[:limit]
             log_event("inbox.ranked", threads=len(triaged))

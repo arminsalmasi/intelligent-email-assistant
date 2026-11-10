@@ -333,7 +333,7 @@ Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on 
 | Meeting kind (new/reschedule/cancel) | 1.0 | 1.0 | 1.0 | 0.6 |
 | Meetings resolved (slot/alternatives/cancel) | 1.0 | 1.0 | 1.0 | 0.6 |
 | Deadline -> reminder on the right day | 1.0 | 0.889 | 0.222 | 0.667 |
-| Ranking precision@8 | 0.5 | 0.625 | 0.625 | 0.625 |
+| Ranking precision@8 | 0.75 | 0.625 | 0.625 | 0.75 |
 | Thread errors | 0 | 0 | 0 | 0 |
 | Faithfulness (LLM judge, mean) | 0.833 | - | - | - |
 | Drafts with an unsupported claim (LLM judge) | 0.2 | - | - | - |
@@ -342,8 +342,8 @@ Live run with `gemini-3.1-flash-lite`: 53.8k input / 9.1k output tokens for the 
 
 What the misses tell us (from the reports in `evals/reports/`):
 - The judge finds what the number check cannot: 3 of 15 drafts promise things the owner never said (e.g. "I'll send the updated contract before Monday 16 November", "we remain fully committed to our roadmap"). The ungrounded-number check passes all of them. Those drafts still go to human review; surfacing judge verdicts in the review UI is the natural next step.
-- Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but ranking precision@8 (0.5 to 0.625 across runs) shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
-- Ranking precision@8 is 0.5 in the Gemini replay and 0.625 for the rule-based run. In replay, triage rates the quarantined prompt-injection threads t28, t30, t34 and t35 as *high* urgency, so they take 4 of the top-8 slots; the ranker does not demote quarantined items. Demoting quarantined threads in the ranker is the obvious fix; it is not implemented.
+- Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but ranking precision@8 (0.625 to 0.75 across runs) shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
+- Quarantined threads are ranked below all other mail: they belong to the security queue, not the working inbox. Before this rule, Gemini rated four prompt-injection threads (t28, t30, t34, t35) *high* urgency and they took half of the top-8 slots (precision@8 0.5, now 0.75).
 - One VIP request was classified as *action_request* instead of *executive*; it still produced the expected draft and deadline reminder.
 - Bedrock (Claude Haiku 4.5) matches or beats Gemini on most rows (category 0.972, expected actions 0.979, every meeting resolved, 0 leaks) at about 99k input / 10.5k output tokens and 98 s for the whole inbox. Its weak spot is the same as Gemini's: urgency (0.722), mostly rating items one level higher than the label.
 - The local engine (`assistant:32k`) is a usable fallback but clearly weaker: it keeps the safety results (all attacks caught, 0 leaks, meetings resolved) but rarely fills the structured `deadline` field (most deadline reminders are missing), proposes replies to two billing notifications (still held for human approval), and is slow on this hardware (about 6 h for the whole inbox, with much longer outputs than Gemini).
@@ -409,7 +409,7 @@ These are deliberate scope choices for a time-boxed prototype.
 - The golden set has 36 threads, so metrics are indicative, not statistically strong.
 - The faithfulness judge is itself an LLM: it is a second opinion for reviewers and a regression signal, not ground truth. Its verdicts were spot-checked, not human-labelled.
 - The default model is `gemini-3.1-flash-lite`, chosen for free-tier quota. The model is a configuration switch (`GEMINI_MODEL`).
-- Bedrock was evaluated with Claude Haiku 4.5 only; on a new AWS account, access settled after a few intermittent "use case not submitted" errors (handled by the circuit breaker).
+- Bedrock was evaluated with Claude Haiku 4.5 only.
 - Rule-based fallbacks are a safety net and a CI baseline, not the intended main path.
 
 ## Repository layout

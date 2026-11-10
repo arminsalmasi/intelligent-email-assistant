@@ -220,6 +220,11 @@ CATEGORY_PRIOR = {
 }
 
 
+def is_quarantined(guard: GuardResult, triage: TriageResult) -> bool:
+    """Single quarantine rule, shared by the thread graph and the inbox ranking."""
+    return guard.is_threat or triage.category == Category.SECURITY_THREAT
+
+
 def priority_score(thread: EmailThread, triage: TriageResult, deps: Deps, now: datetime) -> float:
     msg = thread.latest_inbound or thread.latest
     sender = deps.profile.contact(msg.sender.email)

@@ -32,7 +32,7 @@ flowchart LR
 1. List threads not yet processed.
 2. For inbound replies, resolve awaiting-reply reminders for that thread.
 3. For each thread: `ThreatDetector.assess`, then the triage agent (structured classification, optionally merged with LLM suspicion).
-4. Rank by a priority score (`priority_score`) and assign ranks.
+4. Rank by a priority score (`priority_score`: urgency, category, VIP sender, reply needed, deadline, age; quarantined threads sink to the bottom) and assign ranks.
 5. Run the per-thread graph in rank order with a `thread_id`-keyed checkpoint.
 6. Threads that stop at `interrupt()` appear in the review queue (`pending_reviews`); `submit_review` resumes them.
 

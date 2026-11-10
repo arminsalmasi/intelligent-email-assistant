@@ -19,7 +19,7 @@ from email_assistant.agents.drafter import DrafterAgent
 from email_assistant.agents.followup import FollowUpAgent, awaiting_reply_reminder
 from email_assistant.agents.scheduler import SchedulerAgent
 from email_assistant.agents.summarizer import SummarizerAgent, needs_summary
-from email_assistant.agents.triage import TriageAgent
+from email_assistant.agents.triage import TriageAgent, is_quarantined
 from email_assistant.deps import Deps
 from email_assistant.observability.tracing import traced_node
 from email_assistant.schemas.actions import (
@@ -74,7 +74,7 @@ class ThreadGraph:
             return {}
         t, thread = s["triage"], s["thread"]
         plan = ["labeler"]
-        if s["guard"].is_threat or t.category == Category.SECURITY_THREAT:
+        if is_quarantined(s["guard"], t):
             plan.append("quarantine")
         elif t.category in BULK_CATEGORIES or (
             t.category == Category.INTERNAL

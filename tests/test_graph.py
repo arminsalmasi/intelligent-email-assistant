@@ -2,6 +2,7 @@
 
 import pytest
 
+from email_assistant.agents.triage import is_quarantined
 from email_assistant.llm.fake import FakeLLM
 from email_assistant.schemas.actions import ActionStatus, ActionType
 from email_assistant.schemas.review import HumanDecision, ReviewResponse
@@ -37,6 +38,16 @@ def test_injections_are_quarantined_without_drafts(processed):
         m["to"][0].endswith(("exfil.example", "partner-sync.example"))
         for m in processed.deps.mail.sent_messages()
     )
+
+
+def test_quarantined_threads_rank_below_real_work(processed):
+    ranked = processed.orchestrator.ranked()
+    q = [i.rank for i in ranked if is_quarantined(i.guard, i.triage)]
+    others = [i.rank for i in ranked if not is_quarantined(i.guard, i.triage)]
+    assert q and others and min(q) > max(others)
+    # the quarantined block keeps its own score order
+    scores = [i.score for i in ranked if is_quarantined(i.guard, i.triage)]
+    assert scores == sorted(scores, reverse=True)
 
 
 def test_nothing_outgoing_before_approval(processed):

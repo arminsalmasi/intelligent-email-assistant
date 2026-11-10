@@ -6,7 +6,7 @@ metadata:
 spec:
   # Single replica on purpose: the prototype keeps checkpoints and memory in
   # SQLite on a local volume. Scaling out requires PostgresSaver + a shared
-  # memory store (RDS/pgvector) - see README "Production on AWS".
+  # memory store (RDS/pgvector) - see README "Production path on AWS".
   replicas: 1
   strategy: {type: Recreate}
   selector:

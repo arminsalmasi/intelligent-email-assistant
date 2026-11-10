@@ -4,11 +4,14 @@ UV ?= uv
 .PHONY: help setup test lint format eval eval-offline eval-replay eval-live eval-judge demo demo-auto api engine-tunnel dashboard mlflow docker-up docker-down k8s-validate clean
 
 help:
-	@echo "setup        create .venv and install all extras"
+	@echo "setup        create .venv (all extras) and .env"
 	@echo "test         run unit + graph + API tests (offline)"
 	@echo "lint         ruff check + format check"
+	@echo "format       ruff format + autofix"
 	@echo "eval         golden eval: offline + replay with threshold gate"
-	@echo "eval-live    golden eval against Gemini (records the replay cache)"
+	@echo "eval-offline rule-based baseline only, with threshold gate"
+	@echo "eval-replay  recorded Gemini responses + recorded judge, with threshold gate"
+	@echo "eval-live    golden eval against the LLM chain (records the replay cache)"
 	@echo "eval-judge   re-record faithfulness verdicts with the local engine (needs the tunnel)"
 	@echo "demo         interactive CLI review session (demo-auto: approve all)"
 	@echo "             pick the LLM with LLM=auto|gemini|bedrock|local|none (also api, eval-live)"
@@ -17,11 +20,13 @@ help:
 	@echo "dashboard    Streamlit on :8501 (needs the API)"
 	@echo "mlflow       MLflow UI on :5000"
 	@echo "docker-up    api + dashboard + mlflow via docker compose"
+	@echo "docker-down  stop the docker compose stack"
 	@echo "k8s-validate client-side validation of deploy/k8s manifests"
+	@echo "clean        remove caches, data/, mlruns/ and evals/reports/"
 
 setup:
-	$(UV) venv --python 3.12 .venv
-	$(UV) pip install --python $(PY) -e ".[dev,dashboard,tracing]"
+	$(UV) venv --python 3.12 --allow-existing .venv
+	$(UV) pip install --python $(PY) -e ".[dev,dashboard,tracing,bedrock,local]"
 	@test -f .env || cp .env.example .env
 
 test:

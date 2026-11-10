@@ -24,17 +24,16 @@ This notebook drives the same `AssistantService` used by the API, CLI and eval r
 
 1. process a 36-thread inbox (guard -> triage -> rank -> per-thread LangGraph)
 2. inspect a meeting thread: summary, scheduling decision, tentative holds, grounded draft
-3. human review: approve, **edit** (learned into memory) and an edit that **leaks** data (blocked)
+3. human review: approve, **edit** (learned into memory) and an edit that **leaks** data (bounced back to review)
 4. prompt-injection quarantine
 5. telemetry and the audit trail
 
 `MODE = "replay"` uses recorded Gemini responses (no API key needed);
-`"live"` calls Gemini; `"offline"` uses only the rule-based fallbacks.""",
+`"live"` calls the configured LLM backend(s) (`LLM_PROVIDER`, default auto); `"offline"` uses only the rule-based fallbacks.""",
     ),
     (
         "code",
         f"""import pandas as pd
-from email_assistant.config import Settings
 from email_assistant.service import AssistantService
 from email_assistant.schemas.review import HumanDecision, ReviewResponse
 from evals.run import settings_for

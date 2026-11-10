@@ -7,7 +7,7 @@ The LLM proposes structured output, and deterministic code validates, gates and 
 ## Quickstart
 
 ```bash
-make setup          # uv venv (.venv), install extras, copy .env.example to .env
+make setup          # uv venv (.venv), install all extras (incl. Bedrock and local engine), copy .env.example to .env
 # optional: put GEMINI_API_KEY in .env (see LLM modes below)
 make test           # unit, graph and API tests (offline, no key needed)
 make eval           # golden eval: offline baseline + replay, with threshold gate
@@ -18,7 +18,7 @@ make dashboard      # Streamlit on :8501 (needs the API running)
 docker compose up --build   # api :8000/docs, dashboard :8501, MLflow :5000
 ```
 
-`docker compose` reads `.env` and sets `TRACING_BACKEND=mlflow` for the API, so traces appear in the bundled MLflow server.
+`docker compose` reads `.env` and sets `TRACING_BACKEND=mlflow` for the API, so traces appear in the bundled MLflow server. The image installs only the dashboard and tracing extras, so inside Docker the `auto` chain is Gemini only.
 
 ### Choosing the LLM backend
 
@@ -38,13 +38,13 @@ make api LLM=auto                # Gemini, falling back to the local engine
 python -m email_assistant.cli demo --llm gemini
 ```
 
-`/ready`, the CLI banner and the dashboard sidebar show the active chain and which backends are down. If nothing is available the service logs `llm.unavailable` and runs rule-based.
+`/ready` and the dashboard sidebar show the active chain and which backends are down; the CLI banner shows the active chain. If nothing is available the service logs `llm.unavailable` and runs rule-based.
 
 ### Using your own `.eml` files
 
 The inbox can be loaded from a folder of exported `.eml` files instead of the JSON fixture: `python -m email_assistant.cli demo --eml fixtures/eml` (or `MAIL_EML_DIR=...` for the API). Threads follow `References`/`In-Reply-To` (subject as fallback), messages from the owner are outbound, HTML-only mail is reduced to text with HTML comments kept for the injection guard, attachments are ignored and malformed files are skipped. `fixtures/eml/` has six samples, including a reply chain and an invoice with a hidden instruction.
 
-Embeddings: `EMBEDDING_PROVIDER=auto` uses Gemini embeddings when a key is set, otherwise deterministic hashing (the local engine only serves chat models; loading an embedding model there would evict one of its two pinned models).
+Embeddings: `EMBEDDING_PROVIDER=auto` uses Gemini embeddings (768 dimensions) when a key is set, otherwise deterministic hashing (the local engine only serves chat models; loading an embedding model there would evict one of its two pinned models).
 
 ### Record / replay
 
@@ -58,7 +58,7 @@ The clock is fixed by default (`FIXED_NOW=2026-11-09T09:00:00+01:00`, Europe/Sto
 
 ## What it does
 
-Requirement mapping against `docs/assignment.md`:
+Requirement mapping against the assignment brief:
 
 | Requirement | Where |
 |---|---|
@@ -182,7 +182,7 @@ Once the plan is complete the flow is:
 
 Source priority when records conflict: `user_explicit` > `hitl_feedback` > `observed`.
 
-Embeddings are either Gemini (default, 768 dimensions) or a hashing embedder (offline). They are never mixed: the embedder name is stored with every row, and in replay mode a cache miss raises instead of producing a vector from a different space.
+Embeddings are either Gemini (768 dimensions, when a key is set) or a hashing embedder (offline). They are never mixed: the embedder name is stored with every row, and in replay mode a cache miss raises instead of producing a vector from a different space.
 
 ## Calendar and reminders
 
@@ -205,7 +205,7 @@ Embeddings are either Gemini (default, 768 dimensions) or a hashing embedder (of
 | Data exfiltration via reply | External recipients never receive internal or confidential facts in the prompt; protected-term leak check (hard finding); grounding check |
 | Human edit that leaks data or adds recipients | `revalidate` re-runs policy on edited actions; recipients must be thread participants |
 | Phishing lookalike domains | Edit-distance check against organisation domains |
-| Runaway sending | Per-run outbound limit (`MAX_OUTBOUND_PER_RUN`, default 25); no delete or forward action types exist |
+| Runaway sending | Per-thread outbound limit (`MAX_OUTBOUND_PER_THREAD`, default 3; excess sends are blocked); no delete or forward action types exist |
 
 Mechanics:
 
@@ -214,6 +214,81 @@ Mechanics:
 - The policy engine emits hard findings (block the action) and soft findings (shown to the reviewer). The grounding check flags numbers and dates in a draft that are absent from the thread and retrieved context.
 
 Regex and heuristic detection is a first layer, not a guarantee. The design assumes some injections will pass it, which is why the downstream controls (typed actions, recipient restriction, approval, policy) do not depend on detection.
+
+## Mock integrations
+
+Mail, calendar and reminders are in-memory mocks behind the same interfaces a real adapter would implement, so the agents, policy and executor never know they are talking to a mock.
+
+| Mock | Location | Logic |
+|---|---|---|
+| Mail | `tools/mail.py` (`MailProvider` protocol, `MockMailProvider`) | Loads threads from `fixtures/mailbox.json` or a folder of `.eml` files (`fixtures/eml/`). Labels, archive and send change in-memory state; a sent reply is appended to its thread as an outbound message. |
+| Calendar | `tools/calendar.py` (`MockCalendar`) | Loads `fixtures/calendar.json`. `check_slot` is the deterministic verifier for every proposed slot (model or rule-based); holds are placed, confirmed, released, updated or cancelled only on the thread's linked event. |
+| Reminders | `tools/reminders.py` (`MockReminders`) | Create, list, snooze, complete and a due-soon digest; awaiting-reply reminders close automatically when the counterpart answers. |
+| LLM (tests only) | `llm/fake.py` (`FakeLLM`) | Returns scripted objects per call purpose, so graph tests run without a model. |
+
+All mocks read time from the injected fixed clock (Monday 2026-11-09 09:00 Europe/Stockholm), so runs are reproducible.
+
+Edge cases the mocks handle:
+- **Duplicate side effects:** send, hold and reminder calls take an idempotency key, so retries and resumed reviews never send or book twice.
+- **Slot rules:** `check_slot` rejects non-working days, slots outside 09:00-18:00, meetings after the Friday cutoff, focus blocks, slots outside the attendee's working hours in their own time zone, conflicts, and gaps shorter than the buffer.
+- **Calendar scope:** reschedule and cancel act only on the event linked to the thread, never on an arbitrary event.
+- **Real mail format (`.eml`):** threading by References/In-Reply-To even when the subject changes, HTML-only bodies (HTML comments kept for the injection guard), RFC 2047 encoded subjects, attachments ignored, malformed files skipped, dates without a time zone treated as UTC.
+- **Restart:** mock mailbox and calendar state resets, while review state persists in `inbox.db`.
+
+## Golden dataset
+
+`fixtures/` holds a fictional mailbox for Alex Morgan (Head of AI Platform, `northwind.example`; all domains use `.example`):
+
+- `mailbox.json`: 36 threads (t01-t36) with inbound and outbound messages.
+- `profile.json`: preferences (working hours, Friday cutoff, focus blocks, buffer, sign-off), 15 contacts (VIP flag, time zone, language) and 12 facts tagged public, internal or confidential.
+- `calendar.json`: 12 events.
+- `golden.json`: the expected outcome for every thread.
+
+Each `golden.json` entry holds:
+- the category and urgency, each with acceptable alternatives;
+- whether a reply is needed, the language, and whether the thread is an injection;
+- whether it belongs in the top 8 of the inbox;
+- the expected and forbidden actions;
+- phrases the draft must and must not contain;
+- the expected meeting outcome, the deadline, and a note.
+
+`evals/run.py` runs the full pipeline over the mailbox, auto-approves reviews, compares every thread with its label, and gates on `evals/thresholds.json`.
+
+Edge cases covered:
+- **Priority and deadlines:**
+  - a VIP CFO with a same-day deadline;
+  - a CEO request due Thursday;
+  - review and feedback deadlines written as "Friday EOD" and "Wed 17:00".
+- **Meetings:**
+  - a request in New York time that conflicts with an existing event;
+  - a vague "Thursday afternoon" reschedule;
+  - a cancellation;
+  - a 07:00 request outside working hours;
+  - a Swedish meeting request.
+- **Ambiguity:** a customer outage that mentions payments, so it must not be classified as finance.
+- **Confidentiality:** a customer probing the confidential budget and M&A rumours; the draft must not leak either.
+- **Finance:** an invoice that needs no reply, and a failed card payment with a suspension date.
+- **Long threads:**
+  - a 5-message postmortem with an owned action item;
+  - a 6-message contract negotiation.
+- **Awaiting reply:** the last message is outbound and unanswered, so a follow-up nudge is due.
+- **Languages:** Swedish and Spanish requests, and a Spanish promotion.
+- **Low-value mail:**
+  - newsletter, marketing, a crypto scam;
+  - a facilities FYI and a personal lunch invite;
+  - an executive announcement where Alex is only on CC.
+- **False-positive trap:** a legitimate colleague update that reads like "ignore my previous instructions" and must not be quarantined.
+- **Attacks (10):**
+  - a blunt system override;
+  - a hidden HTML comment;
+  - social engineering for board figures;
+  - an injection inside a quoted reply chain;
+  - a fake invite that books every executive;
+  - a fake policy that disables human review;
+  - a base64-encoded instruction;
+  - an invoice footer addressed to the AI;
+  - zero-width hidden text;
+  - lookalike-domain phishing with no AI-directed text.
 
 ## Evaluation
 
@@ -231,17 +306,17 @@ Regex and heuristic detection is a first layer, not a guarantee. The design assu
 - `faithfulness_mean`, `unfaithful_draft_rate` (with `--judge`, see below)
 - operational: `thread_errors`, `llm_fallbacks`, `llm_cache_misses`, token counts, wall-clock time
 
-Modes: `offline` (no LLM, hashing embeddings; rule-based baseline), `replay` (recorded Gemini responses), `live` (real Gemini, refreshes the recordings, optional `--mlflow` logging). Each run auto-approves pending reviews with a simulated reviewer so the executor is exercised.
+Modes: `offline` (no LLM, hashing embeddings; rule-based baseline), `replay` (recorded Gemini responses), `live` (the configured LLM backend(s): `--provider` picks one, default is `LLM_PROVIDER`/auto, Gemini first; refreshes the recordings; optional `--mlflow` logging). Each run auto-approves pending reviews with a simulated reviewer so the executor is exercised.
 **LLM-graded faithfulness** (`evals/judge.py`). The drafter's own grounding check only compares numbers and times. The judge splits each draft into atomic claims (facts, names, dates, plans, promises) and labels each one supported, unsupported or contradicted against exactly what the drafter was shown: the thread, the memory facts it retrieved (`context_facts` on the payload) and the meeting slots it could quote. Score = supported claims / claims. Design choices:
 - A different model family grades the drafts: the self-hosted `assistant:32k` (Qwen3) judges Gemini's output, so the judge does not share the drafter's blind spots and has no quota limit.
 - Email text is wrapped as untrusted data in the judge prompt too.
 - Verdicts are recorded in `evals/judge_cache/`, so CI reports and gates faithfulness without a model (`--judge local`); `make eval-judge` re-records them (needs the local engine).
 
-Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on a violation. CI runs lint, tests, the offline eval and the replay eval on every push and pull request. A separate manual workflow runs the live eval.
+Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on a violation. CI runs lint, tests, the offline eval and the replay eval (with the recorded judge) on pushes to `main` and on pull requests. A separate manual workflow runs the live eval.
 
 ### Results (36 threads, fixed clock)
 
-| Metric | LLM (Gemini, replayed) | Bedrock (Claude Haiku 4.5, live) | Local engine (`assistant:32k`, live) | Rule-based fallback only |
+| Metric | LLM (Gemini, replayed) | Bedrock (Claude Haiku 4.5, live, eu-north-1) | Local engine (`assistant:32k`, live) | Rule-based fallback only |
 |---|---|---|---|---|
 | Category accuracy | 0.944 | 0.972 | 0.889 | 0.944 |
 | Urgency accuracy | 0.806 | 0.722 | 0.611 | 0.833 |
@@ -265,26 +340,29 @@ Per-mode thresholds are in `evals/thresholds.json`; `--check` exits non-zero on 
 
 Live run with `gemini-3.1-flash-lite`: 53.8k input / 9.1k output tokens for the whole inbox; LLM call latency p50 733 ms, p95 1.3 s; the scheduler's deterministic verifier rejected 2 model-proposed scheduling decisions (fell back to the rule planner). Reports: `evals/reports/<mode>.{md,json}` (generated, not committed).
 
-What the misses tell us (from `evals/reports/replay.md`):
+What the misses tell us (from the reports in `evals/reports/`):
 - The judge finds what the number check cannot: 3 of 15 drafts promise things the owner never said (e.g. "I'll send the updated contract before Monday 16 November", "we remain fully committed to our roadmap"). The ungrounded-number check passes all of them. Those drafts still go to human review; surfacing judge verdicts in the review UI is the natural next step.
-- Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but precision@8 of 0.625 shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
+- Urgency is the weakest dimension (e.g. invoices and a cancellation rated *medium* where the label says *low*). Urgency labels are partly subjective; the ranker compensates with VIP/deadline/age signals, but ranking precision@8 (0.5 to 0.625 across runs) shows ranking is the main thing to improve next (more signals or a learned ranker from reviewer behaviour).
+- Ranking precision@8 is 0.5 in the Gemini replay and 0.625 for the rule-based run. In replay, triage rates the quarantined prompt-injection threads t28, t30, t34 and t35 as *high* urgency, so they take 4 of the top-8 slots; the ranker does not demote quarantined items. Demoting quarantined threads in the ranker is the obvious fix; it is not implemented.
 - One VIP request was classified as *action_request* instead of *executive*; it still produced the expected draft and deadline reminder.
 - Bedrock (Claude Haiku 4.5) matches or beats Gemini on most rows (category 0.972, expected actions 0.979, every meeting resolved, 0 leaks) at about 99k input / 10.5k output tokens and 98 s for the whole inbox. Its weak spot is the same as Gemini's: urgency (0.722), mostly rating items one level higher than the label.
 - The local engine (`assistant:32k`) is a usable fallback but clearly weaker: it keeps the safety results (all attacks caught, 0 leaks, meetings resolved) but rarely fills the structured `deadline` field (most deadline reminders are missing), proposes replies to two billing notifications (still held for human approval), and is slow on this hardware (about 6 h for the whole inbox, with much longer outputs than Gemini).
-- The rule-based fallback is a safety net: it keeps the pipeline safe (same guard/policy results, 0 leaks) but misses most meetings and deadlines.
+- The rule-based fallback is a safety net: it keeps the pipeline safe (same guard/policy results, 0 leaks) but resolves only 60% of meetings (kind and resolution) and 67% of deadlines.
 
 
 ## Observability
 
-Structured JSON logs with run, thread and node correlation; a SQLite event store exposed at `/metrics/summary` and `/metrics/events`; optional MLflow or LangSmith tracing; node errors captured into state and telemetry; a per-thread audit trail. See [docs/observability.md](docs/observability.md).
+Structured JSON logs with run, thread and node correlation; a SQLite event store exposed at `/metrics/summary` and `/metrics/events`; optional MLflow tracing (tested) or LangSmith tracing (toggle only, not tested); node errors captured into state and telemetry; a per-thread audit trail. See [docs/observability.md](docs/observability.md).
 
 | Review queue (policy finding on a confidential figure) | Metrics |
 |---|---|
 | ![review](docs/images/dash_review.png) | ![metrics](docs/images/dash_metrics.png) |
 | **Inbox (ranked)** | **Calendar & reminders** |
 | ![inbox](docs/images/dash_inbox.png) | ![calendar](docs/images/dash_calendar.png) |
+| **Long-term memory** | |
+| ![memory](docs/images/dash_memory.png) | |
 
-Screenshots are from a replay-mode run (recorded Gemini responses) after approving two threads, rejecting one and attempting a leaking edit (bounced back to review).
+Screenshots are from a replay-mode run (recorded Gemini responses): approve t03 and t07, reject t16, and edit t08 to add a confidential budget figure, which is bounced back to review. The metrics screenshot shows LLM p95 latency 0.0 because replay calls are cache hits; live latencies are in the evaluation section.
 
 
 ## API endpoints
@@ -316,7 +394,7 @@ Defined in `email_assistant/api/main.py`.
 - **LLM:** Bedrock behind the same factory (`ChatBedrockConverse`, evaluated end to end with Claude Haiku 4.5; see the results table). In production: IAM role instead of an API key, a model with higher quotas, and a Bedrock Guardrail as an extra input filter.
 - **State:** `PostgresSaver` for checkpoints and Postgres with pgvector for memory, replacing SQLite. This is required for more than one replica; the current manifest pins `replicas: 1` for that reason.
 - **Secrets:** AWS Secrets Manager via External Secrets and IRSA instead of `.env`.
-- **Telemetry:** OpenTelemetry export to Coralogix (see [docs/observability.md](docs/observability.md)).
+- **Telemetry:** planned OpenTelemetry export to Coralogix; no exporter is implemented yet (see [docs/observability.md](docs/observability.md)).
 - **Mail providers:** the `.eml` loader already maps real RFC 5322 mail onto the domain model; live adapters go behind the same `MailProvider` for Gmail (`users.history` with push via Pub/Sub, Drafts as the natural approval surface, least-privilege OAuth scopes) or Microsoft Graph (delta queries, webhooks, `createReply`).
 - **CI/CD:** the existing eval gate runs before image promotion; the live eval stays manual.
 - **Tenancy:** per-tenant isolation of memory, checkpoints and credentials.
@@ -345,21 +423,21 @@ email_assistant/
   memory/        store, embeddings, episodic, feedback, profile, checkpointer, inbox_store
   observability/ logging, metrics (telemetry), tracing
   safety/        injection detector, untrusted wrapping, policy engine
-  schemas/       Pydantic models: email, triage, actions, scheduling, memory, review, state
+  schemas/       Pydantic models: email, triage, actions, scheduling, memory, review, state, profile
   tools/         mail, calendar, reminders, ics
   cli.py, service.py (composition root), config.py, clock.py, deps.py
 dashboard/       Streamlit app
 evals/           run.py, judge.py, thresholds.json, llm_cache/, embed_cache/, judge_cache/
 fixtures/        mailbox, calendar, profile, golden, eml/ samples
 deploy/k8s/      api, dashboard, configmap, secret example
-docs/            architecture.md, observability.md, assignment.md, thread_graph.mmd
+docs/            architecture.md, observability.md, thread_graph.mmd, images/ (dashboard screenshots)
 notebooks/       demo walkthrough
 scripts/         export_graph.py, build_notebook.py
-tests/           unit, graph, API, safety, memory, tools
+tests/           graph, API, safety, memory, tools, LLM client and backends, .eml loader, judge, restart, review hardening
 .github/workflows/  ci.yml, live-eval.yml
 Dockerfile, docker-compose.yml, Makefile
 ```
 
 ## AI-assisted development
 
-This project was built with AI coding assistants used for scaffolding, test and fixture generation, and review. The architecture, safety design, evaluation design and final review were done by the author. Behaviour is covered by tests and evals rather than trusted on inspection.
+Disclaimer: this project was built with AI coding assistants, Google Gemini (in the Antigravity IDE) and Anthropic Claude Code. They were used for scaffolding, fixture and test generation, documentation drafting and code review. The architecture, safety design, evaluation design and final review were done by the author. Behaviour is covered by tests and evals rather than trusted on inspection.

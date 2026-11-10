@@ -145,11 +145,9 @@ If the reviewer rejects the email instead, `execute` runs the compensation path 
 | `summary` | `ThreadSummary` | last write | Thread summary |
 | `plan` | list[str] | last write | Workers still to run |
 | `completed` | list[str] | `operator.add` | Workers finished |
-| `memories` | list[`MemoryHit`] | last write | Retrieved context |
 | `scheduling` | `SchedulingDecision` | last write | Requested time, verdict, alternatives |
 | `actions` | dict[id, `ProposedAction`] | `merge_actions` (merge by id) | All proposed actions and statuses |
 | `review_round` | int | last write | Review/revalidate counter |
-| `pending_review` | bool | last write | Graph is waiting on a human |
 | `audit` | list[dict] | `operator.add` | Append-only trail |
 | `errors` | list[str] | `operator.add` | Captured node errors |
 

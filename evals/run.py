@@ -3,7 +3,7 @@
 Modes
 * offline : no LLM, hashing embeddings      -> rule-based baseline (CI, no key)
 * replay  : recorded Gemini responses/vectors -> LLM pipeline in CI, no key
-* live    : real Gemini, records caches        -> refresh recordings (needs key)
+* live    : configured LLM backend(s), records caches -> refresh recordings (needs key)
 
 Usage: python -m evals.run --mode replay --check
 """
